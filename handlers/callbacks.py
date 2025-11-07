@@ -200,8 +200,8 @@ async def callback_continue_after_notification(callback: CallbackQuery):
     # Показываем сообщение 7.8 с кнопками
     company_text = get_booking_text("company_info")
     company_buttons = {
-        "7.8.А 👉 Переход в ТГ": "link_telegram",
-        "7.8.Б 👉 Переход в ВК": "link_vk",
+        "👉 Переход в ТГ": "link_telegram",
+        "👉 Переход в ВК": "link_vk",
         "Продолжить": "continue_after_company"
     }
     company_keyboard = await keyboard_ops.create_keyboard(buttons=company_buttons, interval=1)
@@ -228,7 +228,7 @@ async def callback_continue_after_company(callback: CallbackQuery):
     """Обработчик callback для кнопки 'Продолжить' после информации о компании"""
     text = get_booking_text("course_intro")
     video_buttons = {
-        "7.9.А 👉 Посмотреть видео": "watch_video",
+        "👉 Посмотреть видео": "watch_video",
         "Продолжить": "continue_after_video_intro"
     }
     video_keyboard = await keyboard_ops.create_keyboard(buttons=video_buttons, interval=2)
@@ -249,7 +249,7 @@ async def callback_continue_after_video_intro(callback: CallbackQuery):
     text = get_booking_text("after_video")
     payment_buttons = {
         "Оплата": "payment",
-        "7.10.А Подробнее": "more_details"
+        "Подробнее": "more_details"
     }
     payment_keyboard = await keyboard_ops.create_keyboard(buttons=payment_buttons, interval=2)
     await callback.message.answer(text, reply_markup=payment_keyboard)
@@ -402,8 +402,8 @@ async def callback_edit_profile_data(callback: CallbackQuery, state: FSMContext)
     # Показываем вопрос "Что нужно изменить?"
     edit_text = get_booking_text("edit_question")
     edit_buttons = {
-        "7.23.Б Цели": "edit_goals",
-        "7.23.В Вызовы": "edit_challenges"
+        "Цели": "edit_goals",
+        "Вызовы": "edit_challenges"
     }
     edit_keyboard = await keyboard_ops.create_keyboard(buttons=edit_buttons, interval=2)
     await callback.message.answer(edit_text, reply_markup=edit_keyboard)
@@ -441,8 +441,8 @@ async def callback_confirm_profile_data(callback: CallbackQuery, state: FSMConte
     # Показываем выбор формата подписки
     subscription_text = get_booking_text("subscription_choice")
     subscription_buttons = {
-        "7.25.А Пройти бесплатную неделю": "free_week",
-        "7.25.Б Подписка на месяц": "monthly_subscription"
+        "Бесплатная неделя": "free_week",
+        "Подписка на месяц": "monthly_subscription"
     }
     subscription_keyboard = await keyboard_ops.create_keyboard(buttons=subscription_buttons, interval=2)
     await callback.message.answer(subscription_text, reply_markup=subscription_keyboard)
@@ -463,8 +463,8 @@ async def callback_free_week(callback: CallbackQuery, state: FSMContext):
     # Показываем запрос согласия на обработку персональных данных
     consent_text = get_booking_text("personal_data_consent")
     consent_buttons = {
-        "7.26.А Далее": "consent_agree",
-        "7.26.Б Не согласен": "consent_disagree"
+        "Далее": "consent_agree",
+        "Не согласен": "consent_disagree"
     }
     consent_keyboard = await keyboard_ops.create_keyboard(buttons=consent_buttons, interval=2)
     await callback.message.answer(consent_text, reply_markup=consent_keyboard)
