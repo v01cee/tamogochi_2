@@ -56,7 +56,6 @@ async def callback_yes_interested(callback: CallbackQuery):
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
         "Обратная связь": "feedback",
-        "Написать нам": "write_to_us",
         "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
@@ -117,8 +116,16 @@ async def callback_about_bot(callback: CallbackQuery):
 @router.callback_query(F.data == "day_strategy")
 async def callback_day_strategy(callback: CallbackQuery):
     """Обработчик callback для 'Стратегия дня'"""
-    text = "Стратегия дня"
+    # Запускаем тот же процесс, что и "Познакомиться ближе"
+    text = get_booking_text("know_better_first_time")
     await callback.message.answer(text)
+    # Показываем второе сообщение о трех касаниях с кнопкой
+    text_three_touches = get_booking_text("know_better_three_touches")
+    understood_buttons = {
+        "Понятно, идем дальше": "understood_move_on"
+    }
+    understood_keyboard = await keyboard_ops.create_keyboard(buttons=understood_buttons, interval=1)
+    await callback.message.answer(text_three_touches, reply_markup=understood_keyboard)
     await callback.answer()
 
 
@@ -145,7 +152,6 @@ async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
         "Обратная связь": "feedback",
-        "Написать нам": "write_to_us",
         "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
@@ -505,7 +511,6 @@ async def callback_consent_disagree(callback: CallbackQuery, state: FSMContext):
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
         "Обратная связь": "feedback",
-        "Написать нам": "write_to_us",
         "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
@@ -660,7 +665,6 @@ async def callback_setup_notifications(callback: CallbackQuery, state: FSMContex
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
         "Обратная связь": "feedback",
-        "Написать нам": "write_to_us",
         "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",

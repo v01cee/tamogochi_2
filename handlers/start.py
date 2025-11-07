@@ -69,7 +69,6 @@ async def process_feedback(message: Message, state: FSMContext):
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
         "Обратная связь": "feedback",
-        "Написать нам": "write_to_us",
         "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
