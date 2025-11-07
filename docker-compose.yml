@@ -43,7 +43,7 @@ services:
     restart: unless-stopped
     volumes:
       - .:/app
-    command: sh -c "sh wait-for-db.sh postgres 'alembic upgrade head && python bot.py'"
+    command: sh wait-for-db.sh postgres "alembic upgrade head && python bot.py"
 
 volumes:
   postgres_data:

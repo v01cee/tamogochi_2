@@ -13,5 +13,5 @@ until pg_isready -h "$host" -U postgres; do
 done
 
 >&2 echo "PostgreSQL готов - выполняем команду"
-exec $cmd
+exec sh -c "$cmd"
 
