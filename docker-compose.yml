@@ -38,12 +38,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
       - .:/app
-    command: sh -c "alembic upgrade head && python bot.py"
+    command: sh -c "./wait-for-db.sh postgres 'alembic upgrade head && python bot.py'"
 
 volumes:
   postgres_data:

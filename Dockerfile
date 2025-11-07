@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копирование кода приложения
 COPY . .
 
+# Делаем скрипт ожидания исполняемым
+RUN chmod +x wait-for-db.sh
+
 # Переменные окружения
 ENV PYTHONUNBUFFERED=1
 
