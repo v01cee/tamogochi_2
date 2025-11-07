@@ -19,7 +19,6 @@ class Settings(BaseSettings):
 
     # Telegram Bot
     bot_token: str
-    bot_username: Optional[str] = None
 
     # Application
     app_name: str = "tamogochi_2"
