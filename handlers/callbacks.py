@@ -165,49 +165,16 @@ async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "know_better")
 async def callback_know_better(callback: CallbackQuery):
     """Обработчик callback для кнопки 'Познакомиться ближе'"""
-    session_gen = get_session()
-    session = next(session_gen)
-    try:
-        user_repo = UserRepository(session)
-        user = user_repo.get_by_telegram_id(callback.from_user.id)
-        
-        # Проверяем, первый ли раз пользователь в боте
-        # Считаем новым, если пользователь был создан в течение последних 10 минут
-        if user:
-            time_threshold = datetime.now(user.created_at.tzinfo) - timedelta(minutes=10)
-            is_first_time = user.created_at >= time_threshold
-            
-            if is_first_time:
-                text = get_booking_text("know_better_first_time")
-                await callback.message.answer(text)
-                # Показываем второе сообщение о трех касаниях с кнопкой
-                text_three_touches = get_booking_text("know_better_three_touches")
-                understood_buttons = {
-                    "Понятно, идем дальше": "understood_move_on"
-                }
-                understood_keyboard = await keyboard_ops.create_keyboard(buttons=understood_buttons, interval=1)
-                await callback.message.answer(text_three_touches, reply_markup=understood_keyboard)
-        else:
-            # Если пользователя нет в базе, создаем его и показываем сообщение
-            user = user_repo.get_or_create(
-                telegram_id=callback.from_user.id,
-                username=callback.from_user.username,
-                first_name=callback.from_user.first_name,
-                last_name=callback.from_user.last_name,
-                language_code=callback.from_user.language_code
-            )
-            text = get_booking_text("know_better_first_time")
-            await callback.message.answer(text)
-            # Показываем второе сообщение о трех касаниях с кнопкой
-            text_three_touches = get_booking_text("know_better_three_touches")
-            understood_buttons = {
-                "Понятно, идем дальше": "understood_move_on"
-            }
-            understood_keyboard = await keyboard_ops.create_keyboard(buttons=understood_buttons, interval=1)
-            await callback.message.answer(text_three_touches, reply_markup=understood_keyboard)
-    finally:
-        session.close()
-    
+    # Запускаем тот же процесс, что и "Стратегия дня"
+    text = get_booking_text("know_better_first_time")
+    await callback.message.answer(text)
+    # Показываем второе сообщение о трех касаниях с кнопкой
+    text_three_touches = get_booking_text("know_better_three_touches")
+    understood_buttons = {
+        "Понятно, идем дальше": "understood_move_on"
+    }
+    understood_keyboard = await keyboard_ops.create_keyboard(buttons=understood_buttons, interval=1)
+    await callback.message.answer(text_three_touches, reply_markup=understood_keyboard)
     await callback.answer()
 
 

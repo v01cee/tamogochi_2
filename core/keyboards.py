@@ -44,6 +44,10 @@ class KeyboardOperations:
                 if interval_count == count:
                     interval = 1
 
+        # Добавляем оставшиеся кнопки, если они есть
+        if buttons_list:
+            keyboard.row(*buttons_list)
+
         return keyboard
 
     @staticmethod
@@ -63,6 +67,10 @@ class KeyboardOperations:
                 interval_count += 1
                 if interval_count == count:
                     interval = 1
+
+        # Добавляем оставшиеся кнопки, если они есть
+        if buttons_list:
+            keyboard.row(*buttons_list)
 
         return keyboard
 
