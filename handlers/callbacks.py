@@ -506,9 +506,9 @@ async def callback_username_confirm_yes(callback: CallbackQuery, state: FSMConte
         "Собственник бизнеса": "role_business_owner",
         "СЕО": "role_ceo",
         "Топ-менеджер": "role_top_manager",
-        "middle-руководитель": "role_middle_manager",
-        "специалист": "role_specialist",
-        "другое": "role_other"
+        "Middle-руководитель": "role_middle_manager",
+        "Специалист": "role_specialist",
+        "Другое": "role_other"
     }
     role_keyboard = await keyboard_ops.create_keyboard(buttons=role_buttons, interval=2)
     await callback.message.answer(role_text, reply_markup=role_keyboard)
@@ -530,8 +530,8 @@ async def callback_role_selected(callback: CallbackQuery, state: FSMContext):
             "business_owner": "Собственник бизнеса",
             "ceo": "СЕО",
             "top_manager": "Топ-менеджер",
-            "middle_manager": "middle-руководитель",
-            "specialist": "специалист"
+            "middle_manager": "Middle-руководитель",
+            "specialist": "Специалист"
         }
         role = role_mapping.get(role_data, role_data)
         await state.update_data(role=role)
@@ -559,9 +559,9 @@ async def callback_edit_profile_personal_data(callback: CallbackQuery, state: FS
     # Показываем вопрос "Что нужно изменить?" с кнопками
     edit_text = get_booking_text("edit_field_question")
     edit_buttons = {
-        "7.33 В ФИО": "edit_name",
-        "7.33.Г Компания": "edit_company",
-        "7.33.Д Должность": "edit_role"
+        "ФИО": "edit_name",
+        "Компания": "edit_company",
+        "Должность": "edit_role"
     }
     edit_keyboard = await keyboard_ops.create_keyboard(buttons=edit_buttons, interval=1)
     await callback.message.answer(edit_text, reply_markup=edit_keyboard)
@@ -610,8 +610,8 @@ async def callback_confirm_profile_personal_data(callback: CallbackQuery, state:
     # Показываем информацию о старте курса
     start_info_text = get_booking_text("course_start_info")
     start_buttons = {
-        "7.35 ЧАТ ЕДИНОМЫШЛЕННИКОВ": "community_chat",
-        "7.36 настроить уведомления от бота": "setup_notifications"
+        "ЧАТ ЕДИНОМЫШЛЕННИКОВ": "community_chat",
+        "настроить уведомления от бота": "setup_notifications"
     }
     start_keyboard = await keyboard_ops.create_keyboard(buttons=start_buttons, interval=2)
     await callback.message.answer(start_info_text, reply_markup=start_keyboard)
