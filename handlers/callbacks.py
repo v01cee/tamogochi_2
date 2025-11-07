@@ -611,9 +611,9 @@ async def callback_confirm_profile_personal_data(callback: CallbackQuery, state:
     start_info_text = get_booking_text("course_start_info")
     start_buttons = {
         "ЧАТ ЕДИНОМЫШЛЕННИКОВ": "community_chat",
-        "настроить уведомления от бота": "setup_notifications"
+        "Настроить уведомления от бота": "setup_notifications"
     }
-    start_keyboard = await keyboard_ops.create_keyboard(buttons=start_buttons, interval=2)
+    start_keyboard = await keyboard_ops.create_keyboard(buttons=start_buttons, interval=1)
     await callback.message.answer(start_info_text, reply_markup=start_keyboard)
     await callback.answer()
 
