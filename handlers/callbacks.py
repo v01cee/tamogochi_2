@@ -55,11 +55,12 @@ async def callback_yes_interested(callback: CallbackQuery):
     # Отправляем главное меню (шаг 6) с кнопками
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
-        "6.1 Обратная связь": "feedback",
-        "6.2 о боте": "about_bot",
-        "6.3 Стратегия дня": "day_strategy",
-        "6.4 Настройка бота": "bot_settings",
-        "6.5 моя подписка": "my_subscription"
+        "Обратная связь": "feedback",
+        "Написать нам": "write_to_us",
+        "о боте": "about_bot",
+        "Стратегия дня": "day_strategy",
+        "Настройка бота": "bot_settings",
+        "моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
@@ -70,6 +71,19 @@ async def callback_yes_interested(callback: CallbackQuery):
 async def callback_feedback(callback: CallbackQuery, state: FSMContext):
     """Обработчик callback для 'Обратная связь'"""
     text = get_booking_text("feedback_request")
+    back_buttons = {
+        "<- Назад": "back_to_menu"
+    }
+    back_keyboard = await keyboard_ops.create_keyboard(buttons=back_buttons, interval=1)
+    await callback.message.answer(text, reply_markup=back_keyboard)
+    await state.set_state(FeedbackStates.waiting_for_feedback)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "write_to_us")
+async def callback_write_to_us(callback: CallbackQuery, state: FSMContext):
+    """Обработчик callback для 'Написать нам'"""
+    text = get_booking_text("write_to_us_request")
     back_buttons = {
         "<- Назад": "back_to_menu"
     }
@@ -122,11 +136,12 @@ async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
-        "6.1 Обратная связь": "feedback",
-        "6.2 о боте": "about_bot",
-        "6.3 Стратегия дня": "day_strategy",
-        "6.4 Настройка бота": "bot_settings",
-        "6.5 моя подписка": "my_subscription"
+        "Обратная связь": "feedback",
+        "Написать нам": "write_to_us",
+        "о боте": "about_bot",
+        "Стратегия дня": "day_strategy",
+        "Настройка бота": "bot_settings",
+        "моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
@@ -481,11 +496,12 @@ async def callback_consent_disagree(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
-        "6.1 Обратная связь": "feedback",
-        "6.2 о боте": "about_bot",
-        "6.3 Стратегия дня": "day_strategy",
-        "6.4 Настройка бота": "bot_settings",
-        "6.5 моя подписка": "my_subscription"
+        "Обратная связь": "feedback",
+        "Написать нам": "write_to_us",
+        "о боте": "about_bot",
+        "Стратегия дня": "day_strategy",
+        "Настройка бота": "bot_settings",
+        "моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
@@ -635,11 +651,12 @@ async def callback_setup_notifications(callback: CallbackQuery, state: FSMContex
     await state.clear()
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
-        "6.1 Обратная связь": "feedback",
-        "6.2 о боте": "about_bot",
-        "6.3 Стратегия дня": "day_strategy",
-        "6.4 Настройка бота": "bot_settings",
-        "6.5 моя подписка": "my_subscription"
+        "Обратная связь": "feedback",
+        "Написать нам": "write_to_us",
+        "о боте": "about_bot",
+        "Стратегия дня": "day_strategy",
+        "Настройка бота": "bot_settings",
+        "моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)

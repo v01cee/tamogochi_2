@@ -69,11 +69,12 @@ async def process_feedback(message: Message, state: FSMContext):
     # Возвращаем в главное меню
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
-        "6.1 Обратная связь": "feedback",
-        "6.2 о боте": "about_bot",
-        "6.3 Стратегия дня": "day_strategy",
-        "6.4 Настройка бота": "bot_settings",
-        "6.5 моя подписка": "my_subscription"
+        "Обратная связь": "feedback",
+        "Написать нам": "write_to_us",
+        "о боте": "about_bot",
+        "Стратегия дня": "day_strategy",
+        "Настройка бота": "bot_settings",
+        "моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await message.answer(step_6_text, reply_markup=menu_keyboard)
