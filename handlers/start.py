@@ -56,12 +56,11 @@ async def cmd_help(message: Message):
 async def process_feedback(message: Message, state: FSMContext):
     """Обработчик текстовых сообщений для обратной связи"""
     # Здесь можно сохранить обратную связь в базу данных
-    # Пока просто отправляем благодарность
     feedback_text = message.text
     
-    # Отправляем благодарность
-    thanks_text = get_booking_text("feedback_thanks")
-    await message.answer(thanks_text)
+    # Отправляем сообщение
+    feedback_request_text = get_booking_text("feedback_request")
+    await message.answer(feedback_request_text)
     
     # Очищаем состояние
     await state.clear()
@@ -71,10 +70,10 @@ async def process_feedback(message: Message, state: FSMContext):
     menu_buttons = {
         "Обратная связь": "feedback",
         "Написать нам": "write_to_us",
-        "о боте": "about_bot",
+        "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
-        "моя подписка": "my_subscription"
+        "Моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await message.answer(step_6_text, reply_markup=menu_keyboard)

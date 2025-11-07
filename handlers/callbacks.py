@@ -41,7 +41,7 @@ async def callback_course_start(callback: CallbackQuery):
     # Отправляем шаг 5 после шага 4 с кнопкой "Да, интересно!"
     step_5_text = get_booking_text("step_5")
     yes_buttons = {
-        "5.1. Да, интересно!": "yes_interested"
+        "Да, интересно!": "yes_interested"
     }
     yes_keyboard = await keyboard_ops.create_keyboard(buttons=yes_buttons, interval=1)
     await callback.message.answer(step_5_text, reply_markup=yes_keyboard)
@@ -57,10 +57,10 @@ async def callback_yes_interested(callback: CallbackQuery):
     menu_buttons = {
         "Обратная связь": "feedback",
         "Написать нам": "write_to_us",
-        "о боте": "about_bot",
+        "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
-        "моя подписка": "my_subscription"
+        "Моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
@@ -71,18 +71,18 @@ async def callback_yes_interested(callback: CallbackQuery):
 async def callback_feedback(callback: CallbackQuery, state: FSMContext):
     """Обработчик callback для 'Обратная связь'"""
     text = get_booking_text("feedback_request")
-    back_buttons = {
+    feedback_buttons = {
+        "Написать нам": "write_to_us_from_feedback",
         "<- Назад": "back_to_menu"
     }
-    back_keyboard = await keyboard_ops.create_keyboard(buttons=back_buttons, interval=1)
-    await callback.message.answer(text, reply_markup=back_keyboard)
-    await state.set_state(FeedbackStates.waiting_for_feedback)
+    feedback_keyboard = await keyboard_ops.create_keyboard(buttons=feedback_buttons, interval=2)
+    await callback.message.answer(text, reply_markup=feedback_keyboard)
     await callback.answer()
 
 
 @router.callback_query(F.data == "write_to_us")
 async def callback_write_to_us(callback: CallbackQuery, state: FSMContext):
-    """Обработчик callback для 'Написать нам'"""
+    """Обработчик callback для 'Написать нам' из главного меню"""
     text = get_booking_text("write_to_us_request")
     back_buttons = {
         "<- Назад": "back_to_menu"
@@ -91,6 +91,14 @@ async def callback_write_to_us(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(text, reply_markup=back_keyboard)
     await state.set_state(FeedbackStates.waiting_for_feedback)
     await callback.answer()
+
+
+@router.callback_query(F.data == "write_to_us_from_feedback")
+async def callback_write_to_us_from_feedback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик callback для 'Написать нам' из экрана обратной связи"""
+    # Ждем ввод от пользователя
+    await state.set_state(FeedbackStates.waiting_for_feedback)
+    await callback.answer("Ожидаю ваше сообщение...")
 
 
 @router.callback_query(F.data == "about_bot")
@@ -124,7 +132,7 @@ async def callback_bot_settings(callback: CallbackQuery):
 
 @router.callback_query(F.data == "my_subscription")
 async def callback_my_subscription(callback: CallbackQuery):
-    """Обработчик callback для 'моя подписка'"""
+    """Обработчик callback для 'Моя подписка'"""
     text = "Моя подписка"
     await callback.message.answer(text)
     await callback.answer()
@@ -138,10 +146,10 @@ async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
     menu_buttons = {
         "Обратная связь": "feedback",
         "Написать нам": "write_to_us",
-        "о боте": "about_bot",
+        "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
-        "моя подписка": "my_subscription"
+        "Моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
@@ -498,10 +506,10 @@ async def callback_consent_disagree(callback: CallbackQuery, state: FSMContext):
     menu_buttons = {
         "Обратная связь": "feedback",
         "Написать нам": "write_to_us",
-        "о боте": "about_bot",
+        "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
-        "моя подписка": "my_subscription"
+        "Моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
@@ -653,10 +661,10 @@ async def callback_setup_notifications(callback: CallbackQuery, state: FSMContex
     menu_buttons = {
         "Обратная связь": "feedback",
         "Написать нам": "write_to_us",
-        "о боте": "about_bot",
+        "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
-        "моя подписка": "my_subscription"
+        "Моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     await callback.message.answer(step_6_text, reply_markup=menu_keyboard)
