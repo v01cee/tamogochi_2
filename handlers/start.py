@@ -30,13 +30,7 @@ async def cmd_start(message: Message):
         session.close()
 
     text = get_booking_text("start")
-    buttons = {
-        "Помощь": "help",
-        "Информация": "info"
-    }
-    keyboard = await keyboard_ops.create_keyboard(buttons=buttons, interval=2)
-
-    await message.answer(text, reply_markup=keyboard)
+    await message.answer(text)
     
     # Отправляем второе сообщение курса
     step_1_text = get_booking_text("step_1")
