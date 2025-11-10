@@ -54,13 +54,27 @@ def generate_radar_chart(
     ax.set_xticklabels(labels, fontsize=11)
     ax.set_rlabel_position(180 / num_vars)
     ax.set_yticks(range(1, 11))
+    ax.set_yticklabels([])
     ax.set_ylim(0, 10)
-    ax.tick_params(axis="y", labelsize=9)
+    ax.tick_params(axis="y", labelsize=0)
     ax.grid(color="#cccccc", linestyle="solid", linewidth=0.8)
 
     # Построение многоугольника
     ax.plot(angles, plot_values, color="#f47c57", linewidth=2)
     ax.fill(angles, plot_values, color="#f7b267", alpha=0.35)
+
+    # Подписи значений на соответствующих осях
+    for angle, value, label in zip(angles[:-1], plot_values[:-1], labels):
+        ax.text(
+            angle,
+            value + 0.4,
+            f"{value:.0f}",
+            color="#444444",
+            fontsize=11,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
 
     if title:
         ax.set_title(title, pad=20, fontsize=14, fontweight="semibold")
