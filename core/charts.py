@@ -51,7 +51,7 @@ def generate_radar_chart(
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels([""] * num_vars)
+    ax.set_xticklabels(labels, fontsize=11)
     ax.set_rlabel_position(180 / num_vars)
     ax.set_yticks(range(1, 11))
     ax.set_yticklabels([])
@@ -74,34 +74,6 @@ def generate_radar_chart(
             fontweight="bold",
             ha="center",
             va="center",
-        )
-    # Подписи осей вручную — чуть ближе к центру, чтобы текст не выходил за границы
-    label_radius = 9.6
-    for angle, label in zip(angles[:-1], labels):
-        cos_a = np.cos(angle)
-        sin_a = np.sin(angle)
-
-        if cos_a > 0.2:
-            ha = "left"
-        elif cos_a < -0.2:
-            ha = "right"
-        else:
-            ha = "center"
-
-        if sin_a > 0.2:
-            va = "bottom"
-        elif sin_a < -0.2:
-            va = "top"
-        else:
-            va = "center"
-
-        ax.text(
-            angle,
-            label_radius,
-            label,
-            fontsize=11,
-            ha=ha,
-            va=va,
         )
 
     if title:
