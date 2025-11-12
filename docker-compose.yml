@@ -61,8 +61,8 @@ services:
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
-    command: sh wait-for-db.sh postgres "python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py runserver 0.0.0.0:8000"
+      - "8042:8042"
+    command: sh wait-for-db.sh postgres "python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042"
 
 volumes:
   postgres_data:
