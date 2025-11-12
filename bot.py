@@ -7,6 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from core.config import settings
 from handlers.start import router as start_router
 from handlers.callbacks import router as callbacks_router
+from services.scheduler import setup_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,8 +29,14 @@ async def main():
     dp.include_router(start_router)
     dp.include_router(callbacks_router)
 
+    scheduler = setup_scheduler(bot)
+
     logger.info("Бот запущен")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        scheduler.shutdown(wait=False)
+        logger.info("Планировщик остановлен")
 
 
 if __name__ == "__main__":

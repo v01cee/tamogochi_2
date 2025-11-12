@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "dashboard",
+    "payments",
 ]
 
 MIDDLEWARE = [
@@ -62,7 +63,7 @@ WSGI_APPLICATION = "admin_panel.wsgi.application"
 
 def _build_database_config() -> dict[str, Any]:
     """Преобразование SQLAlchemy database_url из core.settings в формат Django."""
-    url = make_url(core_settings.database_url)
+    url = make_url(core_settings.db_url)
     engine_mapping = {
         "postgresql": "django.db.backends.postgresql",
         "postgresql+psycopg2": "django.db.backends.postgresql",

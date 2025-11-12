@@ -28,3 +28,9 @@ class ProfileStates(StatesGroup):
     editing_role = State()  # Редактирование роли
     editing_company = State()  # Редактирование компании
 
+
+class NotificationSettingsStates(StatesGroup):
+    """Состояния для настройки уведомлений"""
+    choosing_touch = State()
+    waiting_for_time = State()
+

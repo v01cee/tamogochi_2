@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
@@ -5,6 +7,8 @@ from aiogram.types import CallbackQuery
 from core.keyboards import KeyboardOperations
 from core.states import ProfileStates
 from core.texts import get_booking_text
+from database.session import get_session
+from repositories.user_repository import UserRepository
 
 router = Router()
 keyboard_ops = KeyboardOperations()
@@ -13,6 +17,24 @@ keyboard_ops = KeyboardOperations()
 @router.callback_query(F.data == "free_week")
 async def callback_free_week(callback: CallbackQuery, state: FSMContext):
     """Выбор бесплатной недели."""
+    session = next(get_session())
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+        user_repo.update(
+            user.id,
+            subscription_type="free_week",
+            subscription_started_at=datetime.now(timezone.utc),
+        )
+    finally:
+        session.close()
+
     ready_text = get_booking_text("free_week_ready")
     await callback.message.answer(ready_text)
 
@@ -31,6 +53,23 @@ async def callback_free_week(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "consent_agree")
 async def callback_consent_agree(callback: CallbackQuery, state: FSMContext):
     """Согласие на обработку и запрос имени."""
+    session = next(get_session())
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+        user_repo.update(
+            user.id,
+            consent_accepted_at=datetime.now(timezone.utc),
+        )
+    finally:
+        session.close()
+
     name_text = get_booking_text("name_request")
     await callback.message.answer(name_text)
     await state.set_state(ProfileStates.waiting_for_name)
@@ -94,6 +133,25 @@ async def callback_username_confirm_no(callback: CallbackQuery, state: FSMContex
 @router.callback_query(F.data == "monthly_subscription")
 async def callback_monthly_subscription(callback: CallbackQuery, state: FSMContext):
     """Заглушка платной подписки."""
+    session = next(get_session())
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+        user_repo.update(
+            user.id,
+            subscription_type="monthly",
+            subscription_paid_at=datetime.now(timezone.utc),
+            subscription_started_at=datetime.now(timezone.utc),
+        )
+    finally:
+        session.close()
+
     await callback.answer("Подписка на месяц будет добавлена позже")
 
 

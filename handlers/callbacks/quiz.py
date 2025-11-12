@@ -6,6 +6,9 @@ from core.charts import generate_radar_chart
 from core.keyboards import KeyboardOperations
 from core.states import ProfileStates, QuizStates
 from core.texts import get_booking_text
+from database.session import get_session
+from repositories.quiz_result_repository import QuizResultRepository
+from repositories.user_repository import UserRepository
 
 router = Router()
 keyboard_ops = KeyboardOperations()
@@ -149,6 +152,22 @@ async def callback_quiz_answer_6(callback: CallbackQuery, state: FSMContext):
         _safe_int(data.get("question_5")),
         _safe_int(data.get("question_6")),
     ]
+
+    session = next(get_session())
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+
+        quiz_repo = QuizResultRepository(session)
+        quiz_repo.create_from_answers(user_id=user.id, answers=values)
+    finally:
+        session.close()
 
     result_text = get_booking_text("quiz_result")
 

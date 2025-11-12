@@ -1,15 +1,23 @@
+import logging
+import re
+from datetime import time
+from io import BytesIO
+
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from core.texts import get_booking_text
 from core.keyboards import KeyboardOperations
-from core.states import FeedbackStates, ProfileStates
+from core.states import FeedbackStates, ProfileStates, NotificationSettingsStates
 from database.session import get_session
 from repositories.user_repository import UserRepository
+from qwen_client import generate_qwen_response
+from whisper_client import transcribe_audio
 
 router = Router()
 keyboard_ops = KeyboardOperations()
+logger = logging.getLogger(__name__)
 
 
 @router.message(Command("start"))
@@ -78,23 +86,98 @@ async def process_feedback(message: Message, state: FSMContext):
     await message.answer(step_6_text, reply_markup=menu_keyboard)
 
 
+async def _extract_text(message: Message) -> tuple[str, bool]:
+    """Получить текст ответа, при необходимости расшифровать голос."""
+    if message.text:
+        return message.text.strip(), False
+
+    if message.caption:
+        return message.caption.strip(), False
+
+    if message.voice:
+        audio_buffer = BytesIO()
+        await message.bot.download(message.voice.file_id, destination=audio_buffer)
+        transcription = (await transcribe_audio(audio_buffer)).strip()
+        return transcription, True
+
+    return "", False
+
+
+def _parse_notification_time(text: str) -> time | None:
+    if not text:
+        return None
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", text)
+    if not match:
+        return None
+    hours = int(match.group(1))
+    minutes = int(match.group(2))
+    if not (0 <= hours <= 23 and 0 <= minutes <= 59):
+        return None
+    return time(hour=hours, minute=minutes)
+
+
+def _fallback_format(text: str) -> str:
+    """Базовое форматирование списка пунктов."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return cleaned
+
+    parts = [
+        part.strip("•- \t")
+        for part in re.split(r"[\n;]+", cleaned)
+        if part and part.strip()
+    ]
+    if len(parts) <= 1:
+        return cleaned
+    return "\n".join(f"• {part}" for part in parts)
+
+
+async def _format_with_llm(text: str, title: str) -> str:
+    """Отдать текст в Qwen для аккуратного форматирования."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return cleaned
+
+    prompt = (
+        "Отформатируй список ответов участника курса. "
+        "Выведи короткий заголовок и пункты списка, сохраняя смысл. "
+        "Не добавляй лишних комментариев, верни только текст. "
+        f"Заголовок: {title}. Ответы:\n{cleaned}"
+    )
+
+    try:
+        result = (await generate_qwen_response(prompt)).strip()
+        if result:
+            return result
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Не удалось получить форматирование от Qwen: %s", exc)
+
+    return _fallback_format(cleaned)
+
+
 @router.message(ProfileStates.waiting_for_challenges)
 async def process_challenges(message: Message, state: FSMContext):
     """Обработчик текстовых/голосовых сообщений для вызовов"""
-    # Получаем текст (для голосовых сообщений можно добавить обработку позже)
-    challenges_text = message.text or (message.caption if message.caption else "")
-    
+    try:
+        challenges_text, is_voice = await _extract_text(message)
+    except Exception:
+        await message.answer("Не удалось распознать голосовое сообщение. Отправьте текст или повторите попытку.")
+        return
+
     if not challenges_text:
         await message.answer("Пожалуйста, отправьте текстовое сообщение или голосовое сообщение.")
         return
-    
+
+    if is_voice:
+        await message.answer(f"Записала: {challenges_text}")
+
     # Сохраняем вызовы в state
     await state.update_data(challenges=challenges_text)
     
     # Получаем все данные для проверки
     data = await state.get_data()
-    challenges = data.get("challenges", "%N%")
-    goals = data.get("goals", "%N%")
+    challenges = await _format_with_llm(data.get("challenges", "%N%"), "Ваши вызовы")
+    goals = await _format_with_llm(data.get("goals", "%N%"), "Ваши цели")
     
     # Если цели уже есть, показываем данные для проверки
     if goals != "%N%":
@@ -116,13 +199,19 @@ async def process_challenges(message: Message, state: FSMContext):
 @router.message(ProfileStates.waiting_for_goals)
 async def process_goals(message: Message, state: FSMContext):
     """Обработчик текстовых/голосовых сообщений для целей"""
-    # Получаем текст (для голосовых сообщений можно добавить обработку позже)
-    goals_text = message.text or (message.caption if message.caption else "")
-    
+    try:
+        goals_text, is_voice = await _extract_text(message)
+    except Exception:
+        await message.answer("Не удалось распознать голосовое сообщение. Отправьте текст или повторите попытку.")
+        return
+
     if not goals_text:
         await message.answer("Пожалуйста, отправьте текстовое сообщение или голосовое сообщение.")
         return
-    
+
+    if is_voice:
+        await message.answer(f"Записала: {goals_text}")
+
     # Сохраняем цели в state
     await state.update_data(goals=goals_text)
     
@@ -132,8 +221,8 @@ async def process_goals(message: Message, state: FSMContext):
     
     # Получаем все данные для проверки
     data = await state.get_data()
-    challenges = data.get("challenges", "%N%")
-    goals = data.get("goals", "%N%")
+    challenges = await _format_with_llm(data.get("challenges", "%N%"), "Ваши вызовы")
+    goals = await _format_with_llm(data.get("goals", "%N%"), "Ваши цели")
     
     # Показываем данные для проверки
     review_text = get_booking_text("data_review").replace("%N%", challenges, 1).replace("%N%", goals, 1)
@@ -143,6 +232,52 @@ async def process_goals(message: Message, state: FSMContext):
     }
     review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
     await message.answer(review_text, reply_markup=review_keyboard)
+
+
+@router.message(NotificationSettingsStates.waiting_for_time)
+async def process_notification_time_input(message: Message, state: FSMContext):
+    """Обработка времени уведомлений, введённого пользователем."""
+    entered_time = _parse_notification_time(message.text or "")
+    if entered_time is None:
+        await message.answer(get_booking_text("notification_time_error"))
+        return
+
+    data = await state.get_data()
+    touch_type = data.get("selected_touch")
+    touch_label = data.get("touch_label", "")
+
+    if not touch_type:
+        await state.clear()
+        await message.answer("Что-то пошло не так, попробуй начать настройку заново.")
+        return
+
+    session = next(get_session())
+    try:
+        repo = UserRepository(session)
+        user = repo.get_or_create(
+            telegram_id=message.from_user.id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            language_code=message.from_user.language_code,
+        )
+        repo.set_notification_time(user, touch_type, entered_time)
+    finally:
+        session.close()
+
+    confirmation = get_booking_text("notification_time_saved").format(
+        touch_label=touch_label,
+        time=entered_time.strftime("%H:%M"),
+    )
+    await message.answer(confirmation)
+
+    buttons = {
+        "Настроить ещё": "notification_customize",
+        "В главное меню": "back_to_menu",
+    }
+    keyboard = await keyboard_ops.create_keyboard(buttons=buttons, interval=1)
+    await message.answer("Выбери следующий шаг:", reply_markup=keyboard)
+    await state.set_state(NotificationSettingsStates.choosing_touch)
 
 
 @router.message(ProfileStates.waiting_for_name)

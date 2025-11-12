@@ -1,12 +1,29 @@
+import logging
+import re
+from datetime import datetime, time, timedelta
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+from typing import TYPE_CHECKING
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from core.config import settings
 from core.keyboards import KeyboardOperations
+from core.states import NotificationSettingsStates
 from core.texts import get_booking_text
+from database.session import get_session
+from repositories.user_repository import UserRepository
+from services.payment import PaymentService
+
+if TYPE_CHECKING:
+    from models.user import User
 
 router = Router()
 keyboard_ops = KeyboardOperations()
+logger = logging.getLogger(__name__)
 
 MAIN_MENU_BUTTONS = {
     "Обратная связь": "feedback",
@@ -19,11 +36,6 @@ MAIN_MENU_BUTTONS = {
 ABOUT_BUTTONS = {
     "<- Назад": "back_to_menu",
     "Познакомиться ближе": "know_better",
-}
-
-NOTIFICATION_BUTTONS = {
-    "Главное меню": "back_to_menu",
-    "Продолжить": "continue_after_notification",
 }
 
 COMPANY_BUTTONS = {
@@ -40,6 +52,35 @@ VIDEO_BUTTONS = {
 PAYMENT_BUTTONS = {
     "Оплата": "payment",
     "Подробнее": "more_details",
+}
+
+SUBSCRIPTION_BUTTONS = {
+    "Назад": "back_to_menu",
+    "Оплатить подписку": "payment",
+    "Познакомиться поближе": "know_better",
+}
+
+NOTIFICATION_ENTRY_BUTTONS = {
+    "Настроить под себя": "notification_customize",
+    "Оставить как есть": "notification_use_default",
+}
+
+NOTIFICATION_TOUCH_BUTTONS = {
+    "🌅 Утро": "notification_touch_morning",
+    "🌞 День": "notification_touch_day",
+    "🌙 Вечер": "notification_touch_evening",
+    "Назад": "notification_back_to_entry",
+}
+
+NOTIFICATION_AFTER_SAVE_BUTTONS = {
+    "Настроить ещё": "notification_customize",
+    "В главное меню": "back_to_menu",
+}
+
+DEFAULT_NOTIFICATION_TIMES = {
+    "morning": time(hour=9, minute=0),
+    "day": time(hour=12, minute=0),
+    "evening": time(hour=21, minute=0),
 }
 
 
@@ -102,16 +143,70 @@ async def callback_yes_interested(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "bot_settings")
-async def callback_bot_settings(callback: CallbackQuery):
-    """Заглушка для настройки бота."""
-    await callback.message.answer("Настройка бота")
+async def callback_bot_settings(callback: CallbackQuery, state: FSMContext):
+    """Настройка бота: первый визит — показ вводного сценария, далее напоминание."""
+    need_intro = False
+
+    session_gen = get_session()
+    session = next(session_gen)
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_by_telegram_id(callback.from_user.id)
+
+        if not user:
+            user = user_repo.create(
+                telegram_id=callback.from_user.id,
+                username=callback.from_user.username,
+                first_name=callback.from_user.first_name,
+                last_name=callback.from_user.last_name,
+                language_code=callback.from_user.language_code,
+            )
+
+        if not user.notification_intro_seen:
+            user.notification_intro_seen = True
+            session.commit()
+            need_intro = True
+    finally:
+        session.close()
+
+    if need_intro:
+        await callback_day_strategy(callback)
+        return
+
+    await state.clear()
+    await state.set_state(NotificationSettingsStates.choosing_touch)
+    await _send_keyboard_message(
+        callback,
+        get_booking_text("notification_intro"),
+        NOTIFICATION_ENTRY_BUTTONS,
+        interval=1,
+    )
     await callback.answer()
 
 
 @router.callback_query(F.data == "my_subscription")
 async def callback_my_subscription(callback: CallbackQuery):
-    """Заглушка раздела подписки."""
-    await callback.message.answer("Моя подписка")
+    """Информация о подписке и действия."""
+    session = next(get_session())
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+        trial_status, subscription_status = _build_subscription_status(user)
+    finally:
+        session.close()
+
+    text = get_booking_text("subscription_overview").format(
+        trial_status=trial_status,
+        subscription_status=subscription_status,
+    )
+    keyboard = await keyboard_ops.create_keyboard(SUBSCRIPTION_BUTTONS, interval=1)
+    await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -150,13 +245,15 @@ async def callback_know_better(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "understood_move_on")
-async def callback_understood_move_on(callback: CallbackQuery):
+async def callback_understood_move_on(callback: CallbackQuery, state: FSMContext):
     """Экран настройки уведомлений."""
+    await state.clear()
+    await state.set_state(NotificationSettingsStates.choosing_touch)
     await _send_keyboard_message(
         callback,
-        get_booking_text("notification_setup"),
-        NOTIFICATION_BUTTONS,
-        interval=2,
+        get_booking_text("notification_intro"),
+        NOTIFICATION_ENTRY_BUTTONS,
+        interval=1,
     )
     await callback.answer()
 
@@ -221,8 +318,162 @@ async def callback_continue_after_video_intro(callback: CallbackQuery):
 
 @router.callback_query(F.data == "payment")
 async def callback_payment(callback: CallbackQuery):
-    """Заглушка экрана оплаты."""
-    await callback.answer("Оплата будет добавлена позже")
+    """Генерация ссылки на оплату через Robokassa."""
+    session = next(get_session())
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+
+        payment_service = PaymentService(session)
+        amount = Decimal("5990.00")
+        payment = payment_service.create_payment(
+            user_id=user.id,
+            amount=amount,
+            description="Подписка на 4 недели курса",
+        )
+
+        buttons = {
+            "Оплатить 5 990 ₽": ("url", payment.payment_url or ""),
+            "Главное меню": "back_to_menu",
+        }
+        keyboard = await keyboard_ops.create_keyboard(buttons=buttons, interval=1)
+
+        await callback.message.answer(get_booking_text("payment_offer"), reply_markup=keyboard)
+        await callback.message.answer(get_booking_text("payment_created"))
+    except Exception as exc:
+        logger.exception("Не удалось создать ссылку на оплату: %s", exc)
+        await callback.message.answer(get_booking_text("payment_error"))
+    finally:
+        session.close()
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "notification_back_to_entry", NotificationSettingsStates.choosing_touch)
+async def callback_notification_back_to_entry(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(NotificationSettingsStates.choosing_touch)
+    await _send_keyboard_message(
+        callback,
+        get_booking_text("notification_intro"),
+        NOTIFICATION_ENTRY_BUTTONS,
+        interval=1,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "notification_customize", NotificationSettingsStates.choosing_touch)
+async def callback_notification_customize(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(NotificationSettingsStates.choosing_touch)
+    await _send_keyboard_message(
+        callback,
+        get_booking_text("notification_choose_touch"),
+        NOTIFICATION_TOUCH_BUTTONS,
+        interval=2,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "notification_use_default", NotificationSettingsStates.choosing_touch)
+async def callback_notification_use_default(callback: CallbackQuery, state: FSMContext):
+    session = next(get_session())
+    try:
+        repo = UserRepository(session)
+        user = repo.get_or_create(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+        )
+        for touch, default_time in DEFAULT_NOTIFICATION_TIMES.items():
+            repo.set_notification_time(user, touch, default_time)
+    finally:
+        session.close()
+
+    await state.clear()
+    await _send_keyboard_message(
+        callback,
+        get_booking_text("notification_default_info"),
+        NOTIFICATION_AFTER_SAVE_BUTTONS,
+        interval=1,
+    )
+    await callback.answer()
+
+
+async def _start_waiting_time(
+    callback: CallbackQuery,
+    state: FSMContext,
+    touch_type: str,
+    label: str,
+) -> None:
+    await state.update_data(selected_touch=touch_type, touch_label=label)
+    await state.set_state(NotificationSettingsStates.waiting_for_time)
+    await callback.message.answer(get_booking_text("notification_time_prompt"))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "notification_touch_morning", NotificationSettingsStates.choosing_touch)
+async def callback_notification_touch_morning(callback: CallbackQuery, state: FSMContext):
+    await _start_waiting_time(callback, state, "morning", "утром")
+
+
+@router.callback_query(F.data == "notification_touch_day", NotificationSettingsStates.choosing_touch)
+async def callback_notification_touch_day(callback: CallbackQuery, state: FSMContext):
+    await _start_waiting_time(callback, state, "day", "днём")
+
+
+@router.callback_query(F.data == "notification_touch_evening", NotificationSettingsStates.choosing_touch)
+async def callback_notification_touch_evening(callback: CallbackQuery, state: FSMContext):
+    await _start_waiting_time(callback, state, "evening", "вечером")
+
+
+def parse_notification_time(text: str) -> time | None:
+    if not text:
+        return None
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", text)
+    if not match:
+        return None
+    hours = int(match.group(1))
+    minutes = int(match.group(2))
+    if not (0 <= hours <= 23 and 0 <= minutes <= 59):
+        return None
+    return time(hour=hours, minute=minutes)
+
+
+def _build_subscription_status(user: "User") -> tuple[str, str]:
+    tz = ZoneInfo(settings.timezone)
+    now = datetime.now(tz)
+
+    trial_status = "не использована"
+
+    if user.subscription_type == "free_week":
+        if user.subscription_started_at:
+            start = user.subscription_started_at.astimezone(tz)
+            end = start + timedelta(days=7)
+            if end <= now:
+                trial_status = "использована"
+            else:
+                days_left = max(0, (end - now).days)
+                trial_status = f"активна, осталось {days_left} дн."
+        else:
+            trial_status = "не использована"
+    elif user.subscription_started_at:
+        trial_status = "использована"
+
+    subscription_status = "не оплачена"
+    if user.subscription_paid_at:
+        paid_start = user.subscription_paid_at.astimezone(tz)
+        paid_until = paid_start + timedelta(weeks=4)
+        subscription_status = paid_until.strftime("%d.%m.%Y")
+
+    return trial_status, subscription_status
 
 
 @router.callback_query(F.data == "back_to_menu")

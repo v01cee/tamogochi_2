@@ -45,6 +45,25 @@ services:
       - .:/app
     command: sh wait-for-db.sh postgres "alembic upgrade head && python bot.py"
 
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tamogochi_admin
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tamogochi_db
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    command: sh wait-for-db.sh postgres "python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py runserver 0.0.0.0:8000"
+
 volumes:
   postgres_data:
   redis_data:
