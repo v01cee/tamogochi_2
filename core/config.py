@@ -17,22 +17,22 @@ class Settings(BaseSettings):
 
     # Database
     database_url: Optional[str] = None
-    postgres_host: str = "109.73.202.83"
+    postgres_host: str = ""
     postgres_port: int = 5435
-    postgres_user: str = "admin"
-    postgres_password: str = "123b1h23b1kgasfbasfas123"
-    postgres_db: str = "testing_postgres"
-    db_schema_name: str = "public"
+    postgres_user: str = ""
+    postgres_password: str = ""
+    postgres_db: str = ""
+    db_schema_name: str = ""
 
     # Redis
     redis_url: Optional[str] = None
-    redis_host: str = "109.73.202.83"
-    redis_port: int = 6700
-    redis_password: Optional[str] = "An0th3rStr0ngR3disP@ss"
+    redis_host: str = ""
+    redis_port: int = 
+    redis_password: Optional[str] = ""
     redis_db: int = 0
 
     # Telegram Bot
-    bot_token: str = "8571264937:AAEKtzODxcWczIL4RTdqGosdt2gsFROElPs"
+    bot_token: str = ""
 
     # Application
     app_name: str = "tamogochi_2"
