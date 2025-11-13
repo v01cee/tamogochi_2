@@ -68,8 +68,18 @@ async def callback_edit_goals(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "confirm_profile_data")
 async def callback_confirm_profile_data(callback: CallbackQuery, state: FSMContext):
     """Подтверждение блока с целями/вызовами и выбор подписки."""
-    _ = await state.get_data()
+    data = await state.get_data()
+    goals = data.get("goals", "%N%")
 
+    # Если целей еще нет, переходим к запросу целей
+    if goals == "%N%" or not goals:
+        goals_text = get_booking_text("goals_request")
+        await callback.message.answer(goals_text)
+        await state.set_state(ProfileStates.waiting_for_goals)
+        await callback.answer()
+        return
+
+    # Если цели уже есть, переходим к выбору подписки
     subscription_text = get_booking_text("subscription_choice")
     subscription_keyboard = await keyboard_ops.create_keyboard(
         buttons={

@@ -2,43 +2,36 @@
 Клиент для работы с Qwen API на Cloud.ru.
 Обрабатывает авторизацию и генерацию ответов через модель Qwen.
 """
-import os
 import json
 import time
 import logging
 from typing import List, Dict, Any, Optional
-from dotenv import load_dotenv
 import requests
-
-# Загружаем переменные окружения
-load_dotenv()
+from core.config import settings
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
-# Получаем конфигурацию из переменных окружения
-CLOUDRU_IAM_KEY = os.getenv('CLOUDRU_IAM_KEY')
-CLOUDRU_IAM_SECRET = os.getenv('CLOUDRU_IAM_SECRET')
-CLOUD_PUBLIC_URL = os.getenv('CLOUD_PUBLIC_URL')  # URL модели Qwen
-QWEN_MODEL = os.getenv('QWEN_MODEL', 'library/qwen3-vl:32b')
-SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT', 'Ты - полезный ассистент. Отвечай на русском языке.')
+# Получаем конфигурацию из settings
+CLOUDRU_IAM_KEY = settings.cloudru_iam_key
+CLOUDRU_IAM_SECRET = settings.cloudru_iam_secret
+CLOUD_PUBLIC_URL = settings.cloud_public_url
+QWEN_MODEL = settings.qwen_model
+SYSTEM_PROMPT = settings.system_prompt
 
 # Параметры генерации
-QWEN_MAX_TOKENS = int(os.getenv('QWEN_MAX_TOKENS', '768'))
-QWEN_TEMPERATURE = float(os.getenv('QWEN_TEMPERATURE', '0.2'))
-QWEN_TOP_P = float(os.getenv('QWEN_TOP_P', '0.9'))
-QWEN_TOP_K = int(os.getenv('QWEN_TOP_K', '10'))
-QWEN_FREQUENCY_PENALTY = float(os.getenv('QWEN_FREQUENCY_PENALTY', '0.0'))
-QWEN_REPETITION_PENALTY = float(os.getenv('QWEN_REPETITION_PENALTY', '1.03'))
-QWEN_LENGTH_PENALTY = float(os.getenv('QWEN_LENGTH_PENALTY', '1.0'))
-QWEN_STOP = json.loads(os.getenv('QWEN_STOP', '["User:", "System:"]'))
-CLOUD_TIMEOUT = int(os.getenv('CLOUD_TIMEOUT', '180'))
+QWEN_MAX_TOKENS = settings.qwen_max_tokens
+QWEN_TEMPERATURE = settings.qwen_temperature
+QWEN_TOP_P = settings.qwen_top_p
+QWEN_TOP_K = settings.qwen_top_k
+QWEN_FREQUENCY_PENALTY = settings.qwen_frequency_penalty
+QWEN_REPETITION_PENALTY = settings.qwen_repetition_penalty
+QWEN_LENGTH_PENALTY = settings.qwen_length_penalty
+QWEN_STOP = ["User:", "System:"]  # Стандартные стоп-слова
+CLOUD_TIMEOUT = settings.cloud_timeout
 
 # IAM endpoint
-IAM_TOKEN_URL = os.getenv(
-    'CLOUD_IAM_TOKEN_URL',
-    'https://auth.iam.sbercloud.ru/auth/system/openid/token'
-)
+IAM_TOKEN_URL = settings.cloud_iam_token_url
 
 # Проверяем наличие обязательных переменных
 if not all([CLOUDRU_IAM_KEY, CLOUDRU_IAM_SECRET, CLOUD_PUBLIC_URL]):
@@ -158,14 +151,45 @@ class QwenClient:
             "stream": False,
         }
         
-        t0 = time.time()
-        resp = requests.post(
-            url,
-            headers=self._auth_headers(),
-            json=body,
-            timeout=self.timeout
-        )
+        logger.info(f"Отправляем запрос к Qwen API: {url}")
+        logger.info(f"Модель: {self.model_name}, max_tokens: {self.max_tokens}, timeout: {self.timeout}s")
+        logger.info("Внимание: модель может долго стартовать (до 3 минут на первых запусках), это нормально")
+        logger.debug(f"Тело запроса: {body}")
+        
+        # Пробуем несколько раз с ретраями (модель может долго стартовать)
+        max_retries = 2
+        retry_delay = 10  # секунд между попытками
+        
+        for attempt in range(max_retries + 1):
+            t0 = time.time()
+            try:
+                if attempt > 0:
+                    logger.info(f"Повторная попытка {attempt}/{max_retries} через {retry_delay} секунд...")
+                    time.sleep(retry_delay)
+                
+                resp = requests.post(
+                    url,
+                    headers=self._auth_headers(),
+                    json=body,
+                    timeout=self.timeout
+                )
+                break  # Успешно, выходим из цикла
+                
+            except requests.exceptions.Timeout:
+                if attempt < max_retries:
+                    logger.warning(f"Таймаут при запросе к Qwen API (попытка {attempt + 1}/{max_retries + 1}). "
+                                 f"Модель может еще загружаться. Повторяем...")
+                    continue
+                else:
+                    logger.error(f"Таймаут при запросе к Qwen API после {max_retries + 1} попыток. "
+                              f"Модель {self.model_name} не отвечает за {self.timeout}s.")
+                    raise
+            except Exception as e:
+                logger.error(f"Ошибка при запросе к Qwen API: {e}")
+                raise
+        
         llm_ms = round((time.time() - t0) * 1000, 2)
+        logger.info(f"Получен ответ от Qwen за {llm_ms}ms (статус: {resp.status_code})")
         
         # Авторизационный 401 — пробуем обновить токен 1 раз
         if resp.status_code == 401:

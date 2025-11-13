@@ -12,6 +12,11 @@ engine = create_engine(
     poolclass=NullPool,
     echo=settings.debug,
     future=True,
+    connect_args={
+        "connect_timeout": 10,  # Таймаут подключения 10 секунд
+        "options": "-c statement_timeout=30000",  # Таймаут запросов 30 секунд
+    },
+    pool_pre_ping=True,  # Проверка соединения перед использованием
 )
 
 SessionLocal = sessionmaker(

@@ -12,30 +12,31 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        protected_namespaces=('settings_',),
     )
 
     # Database
     database_url: Optional[str] = None
-    postgres_host: str = "localhost"
+    postgres_host: str = ""
     postgres_port: int = 5432
-    postgres_user: str = "postgres"
-    postgres_password: str = "postgres"
-    postgres_db: str = "tamogochi_db"
+    postgres_user: str = ""
+    postgres_password: str = ""
+    postgres_db: str = ""
     db_schema_name: str = "public"
 
     # Redis
     redis_url: Optional[str] = None
-    redis_host: str = "localhost"
+    redis_host: str = ""
     redis_port: int = 6379
     redis_password: Optional[str] = None
     redis_db: int = 0
 
     # Telegram Bot
-    bot_token: str
+    bot_token: str = ""
 
     # Application
     app_name: str = "tamogochi_2"
-    app_port: int = 8000
+    app_port: int = 8042
     debug: bool = False
     timezone: str = "Europe/Moscow"
     media_root: str = "media"
@@ -52,6 +53,30 @@ class Settings(BaseSettings):
 
     # Community
     community_chat_url: str | None = None
+
+    # Cloud.ru API (Whisper)
+    cloudru_iam_key: str = ""
+    cloudru_iam_secret: str = ""
+    whisper_model_url: str = ""
+    whisper_model_name: str = "model-run-wxryh-soft"
+
+    # Cloud.ru API (Qwen)
+    cloud_public_url: str = ""
+    # Попробуем разные варианты моделей (если одна не работает, можно попробовать другую):
+    # "library/qwen2.5:14b" - текстовая модель 14B параметров
+    # "library/qwen2.5:7b" - текстовая модель 7B параметров (быстрее)
+    # "library/qwen2.5vl:32b" - vision-language модель 32B (медленнее, но была рабочей)
+    qwen_model: str = "library/qwen2.5vl:32b"  # Возвращаем рабочую модель (дообучающаяся, долго стартует)
+    system_prompt: str = "Ты - полезный ассистент. Отвечай на русском языке."
+    qwen_max_tokens: int = 512
+    qwen_temperature: float = 0.2
+    qwen_top_p: float = 0.9
+    qwen_top_k: int = 10
+    qwen_frequency_penalty: float = 0.0
+    qwen_repetition_penalty: float = 1.03
+    qwen_length_penalty: float = 1.0
+    cloud_timeout: int = 300  # 5 минут - модель долго стартует (до 3 минут на первых запусках)
+    cloud_iam_token_url: str = "https://auth.iam.sbercloud.ru/auth/system/openid/token"
 
     # Python
     python_version: str = "3.12"

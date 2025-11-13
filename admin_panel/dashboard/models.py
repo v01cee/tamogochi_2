@@ -110,9 +110,9 @@ class TouchContent(models.Model):
         db_column="video_file_path",
     )
     video_url = models.URLField("Ссылка на видео", max_length=500, blank=True, null=True)
-    summary = models.TextField("Краткое описание", blank=True, null=True)
+    summary = models.TextField("Описание", blank=True, null=True)
     transcript = models.TextField("Расшифровка", blank=True, null=True)
-    questions = models.TextField("Вопросы", blank=True, null=True)
+    questions = models.TextField("Вопросы (писать через пропуск строки)", blank=True, null=True)
     is_active = models.BooleanField("Активно", default=True)
     order_index = models.IntegerField("Порядок", default=0)
     created_at = models.DateTimeField("Создан", auto_now_add=True, editable=False)

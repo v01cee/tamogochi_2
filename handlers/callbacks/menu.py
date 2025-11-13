@@ -1,22 +1,25 @@
 import logging
 import re
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from typing import TYPE_CHECKING
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, FSInputFile
 
 from core.config import settings
 from core.keyboards import KeyboardOperations
 from core.states import NotificationSettingsStates
 from core.texts import get_booking_text
 from database.session import get_session
+from repositories.touch_content_repository import TouchContentRepository
 from repositories.user_repository import UserRepository
 from services.payment import PaymentService
+from services.touch_utils import calculate_course_day, fetch_touch_content
 
 if TYPE_CHECKING:
     from models.user import User
@@ -61,8 +64,8 @@ SUBSCRIPTION_BUTTONS = {
 }
 
 NOTIFICATION_ENTRY_BUTTONS = {
-    "Настроить под себя": "notification_customize",
-    "Оставить как есть": "notification_use_default",
+    "Главное меню": "back_to_menu",
+    "Продолжить": "notification_use_default",
 }
 
 NOTIFICATION_TOUCH_BUTTONS = {
@@ -162,7 +165,8 @@ async def callback_bot_settings(callback: CallbackQuery, state: FSMContext):
                 language_code=callback.from_user.language_code,
             )
 
-        if not user.notification_intro_seen:
+        if user.is_first_visit:
+            user.is_first_visit = False
             user.notification_intro_seen = True
             session.commit()
             need_intro = True
@@ -225,16 +229,102 @@ async def callback_about_bot(callback: CallbackQuery):
 @router.callback_query(F.data == "day_strategy")
 async def callback_day_strategy(callback: CallbackQuery):
     """Экран 'Стратегия дня'."""
-    first_text = get_booking_text("know_better_first_time")
-    await callback.message.answer(first_text)
+    # Проверяем, откуда пришел callback
+    # Если это сообщение со ссылкой на видео (уже отправленное), не дублируем его
+    message_text = callback.message.text or ""
+    message_caption = callback.message.caption or ""
+    
+    # Если сообщение уже содержит ссылку на видео (Figma или другой URL), 
+    # значит это сообщение со ссылкой, которое уже было отправлено
+    # В этом случае просто подтверждаем нажатие, не отправляя новое сообщение
+    if "figma.com" in message_text.lower() or "http" in message_text.lower() or "https://" in message_text.lower():
+        logger.info(f"[DAY_STRATEGY] Callback от сообщения со ссылкой, не дублируем")
+        await callback.answer("Вы уже в разделе «Стратегия дня»")
+        return
+    
+    session_gen = get_session()
+    session = next(session_gen)
+    try:
+        try:
+            user_repo = UserRepository(session)
+            user = user_repo.get_by_telegram_id(callback.from_user.id)
+        except Exception as db_error:
+            # Если БД недоступна, продолжаем работу без сохранения
+            logger.warning(f"Не удалось получить пользователя из БД: {db_error}. Продолжаем работу.")
+            await callback.answer("База данных временно недоступна. Попробуйте позже.")
+            return
 
-    second_text = get_booking_text("know_better_three_touches")
-    await _send_keyboard_message(
-        callback,
-        second_text,
-        {"Понятно, идем дальше": "understood_move_on"},
-        interval=1,
-    )
+        if not user:
+            user = user_repo.create(
+                telegram_id=callback.from_user.id,
+                username=callback.from_user.username,
+                first_name=callback.from_user.first_name,
+                last_name=callback.from_user.last_name,
+                language_code=callback.from_user.language_code,
+            )
+
+        # Если первый раз - показываем интро
+        if user.is_first_visit:
+            first_text = get_booking_text("know_better_first_time")
+            await callback.message.answer(first_text)
+
+            second_text = get_booking_text("know_better_three_touches")
+            await _send_keyboard_message(
+                callback,
+                second_text,
+                {"Понятно, идем дальше": "understood_move_on"},
+                interval=1,
+            )
+            await callback.answer()
+            return
+
+        # Если не первый раз - показываем актуальную практику дня
+        today = date.today()
+        course_day = calculate_course_day(user, today)
+        touch_repo = TouchContentRepository(session)
+        content = fetch_touch_content(touch_repo, touch_type="day", course_day=course_day)
+
+        if content:
+            # Для day_touch отправляем только описание и ссылку на видео (как в админке)
+            # Не отправляем видео файл и вопросы
+            
+            # Шаг 1: Отправляем описание (summary)
+            if content.summary:
+                summary_text = content.summary.strip()
+                await callback.message.answer(summary_text)
+            
+            # Шаг 2: Отправляем ссылку на видео с кнопками
+            if content.video_url:
+                # Создаем клавиатуру с кнопками для day_touch
+                from aiogram.utils.keyboard import InlineKeyboardBuilder
+                
+                keyboard_builder = InlineKeyboardBuilder()
+                # Первая кнопка: "Перейти в чат" (если есть URL - ссылка, иначе заглушка)
+                if settings.community_chat_url:
+                    keyboard_builder.button(text="Перейти в чат", url=settings.community_chat_url)
+                else:
+                    # Заглушка для кнопки "Перейти в чат"
+                    keyboard_builder.button(text="Перейти в чат", callback_data="chat_placeholder")
+                # Вторая кнопка: "В меню «Стратегия дня»"
+                keyboard_builder.button(text="В меню «Стратегия дня»", callback_data="day_strategy")
+                keyboard_builder.adjust(1, 1)
+                keyboard = keyboard_builder.as_markup()
+                
+                video_url = content.video_url.strip()
+                await callback.message.answer(video_url, reply_markup=keyboard)
+            
+            # Для day_touch не отправляем:
+            # - video_file_path (видео файл)
+            # - transcript
+            # - questions
+        else:
+            # Если контента нет, показываем сообщение по умолчанию
+            default_text = get_booking_text("day_touch_prompt")
+            await callback.message.answer(default_text)
+
+    finally:
+        session.close()
+
     await callback.answer()
 
 
@@ -398,10 +488,17 @@ async def callback_notification_use_default(callback: CallbackQuery, state: FSMC
         session.close()
 
     await state.clear()
+    
+    # Отправляем сообщение 7.7 - про автора
+    author_text = get_booking_text("author_info")
+    await callback.message.answer(author_text)
+    
+    # Отправляем сообщение 7.8 - про компанию с кнопками
+    company_text = get_booking_text("company_info")
     await _send_keyboard_message(
         callback,
-        get_booking_text("notification_default_info"),
-        NOTIFICATION_AFTER_SAVE_BUTTONS,
+        company_text,
+        COMPANY_BUTTONS,
         interval=1,
     )
     await callback.answer()
@@ -474,6 +571,12 @@ def _build_subscription_status(user: "User") -> tuple[str, str]:
         subscription_status = paid_until.strftime("%d.%m.%Y")
 
     return trial_status, subscription_status
+
+
+@router.callback_query(F.data == "chat_placeholder")
+async def callback_chat_placeholder(callback: CallbackQuery):
+    """Обработчик заглушки для кнопки 'Перейти в чат'"""
+    await callback.answer("Чат пока не доступен. Скоро мы его добавим! 👋", show_alert=False)
 
 
 @router.callback_query(F.data == "back_to_menu")

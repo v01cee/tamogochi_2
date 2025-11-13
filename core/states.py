@@ -34,3 +34,8 @@ class NotificationSettingsStates(StatesGroup):
     choosing_touch = State()
     waiting_for_time = State()
 
+
+class TouchQuestionStates(StatesGroup):
+    """Состояния для ответов на вопросы касания"""
+    waiting_for_answer = State()  # Ожидание ответа на вопрос касания
+    waiting_for_voice_confirmation = State()  # Ожидание подтверждения голосового сообщения
