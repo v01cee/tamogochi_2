@@ -32,37 +32,26 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: tamogochi_bot
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tamogochi_db
-      REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
-    depends_on:
-      - postgres
-      - redis
     restart: unless-stopped
     volumes:
       - .:/app
-    command: sh wait-for-db.sh postgres "alembic upgrade head && python bot.py"
+    command: python bot.py
 
   admin:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: tamogochi_admin
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tamogochi_db
     env_file:
       - .env
-    depends_on:
-      - postgres
-      - redis
     restart: unless-stopped
     volumes:
       - .:/app
     ports:
       - "8042:8042"
-    command: sh wait-for-db.sh postgres "python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042"
+    command: sh -c "python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042"
 
 volumes:
   postgres_data:
