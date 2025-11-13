@@ -21,6 +21,6 @@ matplotlib==3.9.2
 
 # Audio processing (для оптимизации аудио перед отправкой в Whisper)
 pydub==0.25.1
-audioop-lts==0.2.2  # Замена audioop для Python 3.13+
+# audioop-lts не нужен для Python 3.12 (audioop встроен в стандартную библиотеку)
 
 
