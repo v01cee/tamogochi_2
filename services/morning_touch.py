@@ -68,6 +68,10 @@ async def send_morning_touch(bot: Bot) -> None:
     now = datetime.now(tz=tz)
     target_date = now.date()
 
+    # Получаем bot_id один раз
+    bot_info = await bot.get_me()
+    bot_id = bot_info.id
+
     users = await asyncio.to_thread(_fetch_users, target_date)
     if not users:
         logger.info("Утреннее касание: нет пользователей для отправки")
@@ -90,8 +94,8 @@ async def send_morning_touch(bot: Bot) -> None:
             )
 
             if content:
-                await _send_touch_content(bot, telegram_id, content)
-            await bot.send_message(telegram_id, TEXTS[MORNING_TOUCH_TEXT_KEY])
+                await _send_touch_content(bot, telegram_id, content, bot_id=bot_id)
+            # Текст "Пожалуйста, ответь на эти вопросы..." уже отправлен в _send_touch_content
             sent_user_ids.append(user_id)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(
@@ -104,42 +108,88 @@ async def send_morning_touch(bot: Bot) -> None:
     logger.info("Утреннее касание: отправлено %s сообщений", len(sent_user_ids))
 
 
-async def _send_touch_content(bot: Bot, telegram_id: int, content: TouchContent) -> None:
+async def _send_touch_content(bot: Bot, telegram_id: int, content: TouchContent, bot_id: int = None) -> None:
     """Отправить пользователю материалы касания."""
-    header_parts = [
-        part for part in (content.step_code, content.title) if part
-    ]
-    header = " — ".join(header_parts)
-
+    import redis
+    import json
+    
+    # Получаем bot_id если не передан
+    if bot_id is None:
+        bot_info = await bot.get_me()
+        bot_id = bot_info.id
+    
+    # Формируем caption: описание (summary) отправляется как текст к видео
+    caption = content.summary.strip() if content.summary else None
+    
+    # Отправляем видео с описанием в caption
+    video_sent = False
     if content.video_file_path:
         file_path = Path(settings.media_root) / content.video_file_path
-        caption_parts = [header, content.summary]
-        caption = "\n\n".join(part.strip() for part in caption_parts if part and part.strip())
         if file_path.exists():
             await bot.send_video(
                 telegram_id,
                 FSInputFile(file_path),
-                caption=caption or None,
+                caption=caption,
             )
+            video_sent = True
         else:
             logger.warning("Файл видео касания не найден: %s", file_path)
             if content.video_url:
-                await bot.send_video(telegram_id, content.video_url, caption=caption or None)
+                await bot.send_video(telegram_id, content.video_url, caption=caption)
+                video_sent = True
     elif content.video_url:
-        caption_parts = [header, content.summary]
-        caption = "\n\n".join(part.strip() for part in caption_parts if part and part.strip())
-        await bot.send_video(telegram_id, content.video_url, caption=caption or None)
-    else:
-        text_parts = [header, content.summary]
-        text = "\n\n".join(part.strip() for part in text_parts if part and part.strip())
-        if text:
-            await bot.send_message(telegram_id, text)
-
-    if content.transcript:
-        await bot.send_message(telegram_id, content.transcript.strip())
-
+        await bot.send_video(telegram_id, content.video_url, caption=caption)
+        video_sent = True
+    
+    # Если видео нет - отправляем только описание
+    if not video_sent:
+        if content.summary:
+            await bot.send_message(telegram_id, content.summary.strip())
+    
+    # После отправки видео/описания отправляем фиксированный текст
+    await bot.send_message(
+        telegram_id,
+        "Пожалуйста, ответь на эти вопросы — напиши или наговори голосом свои мысли. Мы соберём их в твою личную карту стратегий"
+    )
+    
+    # Через 5 секунд отправляем первый вопрос из поля "Вопросы"
     if content.questions:
-        await bot.send_message(telegram_id, content.questions.strip())
+        await asyncio.sleep(5)
+        
+        # Разделяем вопросы по переносу строки
+        questions_text = content.questions.strip()
+        split_lines = questions_text.split('\n')
+        questions_list = [line.strip() for line in split_lines if line.strip()]
+        
+        if questions_list:
+            first_question = questions_list[0]
+            await bot.send_message(telegram_id, first_question)
+            
+            # Сохраняем состояние и данные в Redis для обработки ответов
+            redis_client = redis.Redis(
+                host=settings.redis_host,
+                port=settings.redis_port,
+                password=settings.redis_password,
+                db=settings.redis_db,
+                decode_responses=True
+            )
+            
+            state_key = f"fsm:{bot_id}:{telegram_id}:state"
+            data_key = f"fsm:{bot_id}:{telegram_id}:data"
+            
+            # Сохраняем состояние для обработки вопросов касания
+            redis_client.set(state_key, "TouchQuestionStates:waiting_for_answer", ex=3600)
+            
+            # Сохраняем данные о вопросах
+            redis_data = {
+                "touch_content_id": content.id,
+                "questions_list": questions_list,
+                "current_question_index": 0,
+                "answers": []
+            }
+            redis_client.set(data_key, json.dumps(redis_data), ex=3600)
+            
+            logger.info(f"[MORNING_TOUCH] Отправлен первый вопрос для пользователя {telegram_id}, всего вопросов: {len(questions_list)}")
 
 
 def _get_content_for_user(user_id: int, for_date: date) -> Optional[TouchContent]:

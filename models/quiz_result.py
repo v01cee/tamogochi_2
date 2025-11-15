@@ -15,10 +15,9 @@ class QuizResult(Base):
     """Результаты стартового опроса пользователя."""
 
     __tablename__ = "quiz_results"
-    __table_args__ = {"schema": "public"}
 
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("public.users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

@@ -18,9 +18,14 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Обязательно укажите:
+Обязательно укажите все переменные из `.env.example`, особенно:
 - `BOT_TOKEN` - токен вашего Telegram бота
-- `DATABASE_URL` - URL подключения к PostgreSQL
+- `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` - настройки PostgreSQL
+- `SECRET_KEY` - секретный ключ Django
+- `ROBOKASSA_SHOP_ID`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2` - настройки Robokassa
+- `CLOUDRU_IAM_KEY`, `CLOUDRU_IAM_SECRET` - ключи Cloud.ru API
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - ключи AWS S3
+- И другие переменные из `env.example`
 
 ### 3. Запуск с Docker
 
@@ -58,7 +63,7 @@ python manage.py runserver 0.0.0.0:8042
 ## 📁 Структура проекта
 
 ```
-tamogochi_2/
+project/
 ├── alembic/              # Миграции базы данных
 ├── core/                 # Общая логика
 │   ├── config.py        # Конфигурация
@@ -101,11 +106,26 @@ alembic upgrade head
 
 ## 📝 Переменные окружения
 
-- `DATABASE_URL` - URL подключения к PostgreSQL
-- `REDIS_URL` - URL подключения к Redis
+Все переменные окружения описаны в файле `env.example`. Основные:
+
+**Обязательные:**
 - `BOT_TOKEN` - Токен Telegram бота
-- `BOT_USERNAME` - Имя пользователя бота (опционально)
+- `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` - настройки PostgreSQL
+- `SECRET_KEY` - Секретный ключ Django
+- `ROBOKASSA_SHOP_ID`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2` - настройки Robokassa
+- `CLOUDRU_IAM_KEY`, `CLOUDRU_IAM_SECRET` - ключи Cloud.ru API для Whisper и Qwen
+- `WHISPER_MODEL_URL`, `CLOUD_PUBLIC_URL` - URLs моделей Cloud.ru
+- `AWS_S3_ENDPOINT_URL`, `AWS_STORAGE_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - настройки AWS S3
+
+**Опциональные:**
+- `DATABASE_URL` - Полный URL подключения к PostgreSQL (альтернатива отдельным переменным)
+- `REDIS_URL` - Полный URL подключения к Redis (альтернатива отдельным переменным)
+- `REDIS_PASSWORD` - Пароль Redis (если требуется)
 - `DEBUG` - Режим отладки (True/False)
+- `COMMUNITY_CHAT_URL` - URL чата сообщества
+- `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` - данные для создания суперпользователя
+
+Полный список см. в `env.example`
 
 ## 🐳 Docker
 

@@ -157,8 +157,12 @@ class QwenClient:
         logger.debug(f"Тело запроса: {body}")
         
         # Пробуем несколько раз с ретраями (модель может долго стартовать)
-        max_retries = 2
-        retry_delay = 10  # секунд между попытками
+        # Для больших моделей (32b) увеличиваем количество попыток и таймаут
+        max_retries = 3  # Увеличено с 2 до 3 (всего 4 попытки)
+        retry_delay = 15  # Увеличено с 10 до 15 секунд между попытками
+        
+        # Для больших моделей увеличиваем таймаут запроса
+        request_timeout = max(self.timeout, 600)  # Минимум 10 минут для больших моделей
         
         for attempt in range(max_retries + 1):
             t0 = time.time()
@@ -167,25 +171,39 @@ class QwenClient:
                     logger.info(f"Повторная попытка {attempt}/{max_retries} через {retry_delay} секунд...")
                     time.sleep(retry_delay)
                 
+                logger.info(f"Попытка {attempt + 1}/{max_retries + 1}: отправка запроса к Qwen (таймаут: {request_timeout}s)")
                 resp = requests.post(
                     url,
                     headers=self._auth_headers(),
                     json=body,
-                    timeout=self.timeout
+                    timeout=request_timeout
                 )
+                logger.info(f"✓ Получен ответ от Qwen (статус: {resp.status_code})")
                 break  # Успешно, выходим из цикла
                 
             except requests.exceptions.Timeout:
+                elapsed = time.time() - t0
                 if attempt < max_retries:
-                    logger.warning(f"Таймаут при запросе к Qwen API (попытка {attempt + 1}/{max_retries + 1}). "
-                                 f"Модель может еще загружаться. Повторяем...")
+                    logger.warning(f"✗ Таймаут при запросе к Qwen API (попытка {attempt + 1}/{max_retries + 1}, "
+                                 f"прошло {elapsed:.1f}s из {request_timeout}s). "
+                                 f"Модель может еще загружаться. Повторяем через {retry_delay} секунд...")
                     continue
                 else:
-                    logger.error(f"Таймаут при запросе к Qwen API после {max_retries + 1} попыток. "
-                              f"Модель {self.model_name} не отвечает за {self.timeout}s.")
+                    total_time = time.time() - t0
+                    logger.error(f"✗ Таймаут при запросе к Qwen API после {max_retries + 1} попыток. "
+                              f"Модель {self.model_name} не отвечает. "
+                              f"Общее время ожидания: {total_time:.1f}s. "
+                              f"Возможно, модель недоступна или перегружена.")
+                    raise TimeoutError(f"Qwen API не отвечает после {max_retries + 1} попыток (общее время: {total_time:.1f}s)")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"✗ Ошибка сети при запросе к Qwen API (попытка {attempt + 1}): {e}")
+                if attempt < max_retries:
+                    logger.info(f"Повторяем попытку через {retry_delay} секунд...")
+                    continue
+                else:
                     raise
             except Exception as e:
-                logger.error(f"Ошибка при запросе к Qwen API: {e}")
+                logger.error(f"✗ Неожиданная ошибка при запросе к Qwen API: {e}", exc_info=True)
                 raise
         
         llm_ms = round((time.time() - t0) * 1000, 2)

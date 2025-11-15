@@ -25,12 +25,13 @@ logger = logging.getLogger(__name__)
 async def cmd_start(message: Message):
     """Обработчик команды /start"""
     # Пытаемся сохранить пользователя в БД, но не блокируем работу бота при ошибках
+    user = None
     try:
         session_gen = get_session()
         session = next(session_gen)
         try:
             user_repo = UserRepository(session)
-            user_repo.get_or_create(
+            user = user_repo.get_or_create(
                 telegram_id=message.from_user.id,
                 username=message.from_user.username,
                 first_name=message.from_user.first_name,
@@ -43,6 +44,21 @@ async def cmd_start(message: Message):
         # Логируем ошибку, но продолжаем работу бота
         logger.warning(f"Не удалось сохранить пользователя в БД: {e}. Бот продолжает работу.")
 
+    # Если пользователь не первый раз в боте, сразу показываем главное меню
+    if user and not user.is_first_visit:
+        step_6_text = get_booking_text("step_6")
+        menu_buttons = {
+            "Обратная связь": "feedback",
+            "О боте": "about_bot",
+            "Стратегия дня": "day_strategy",
+            "Настройка бота": "bot_settings",
+            "Моя подписка": "my_subscription"
+        }
+        menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
+        await message.answer(step_6_text, reply_markup=menu_keyboard)
+        return
+
+    # Если первый визит, показываем вводные сообщения
     text = get_booking_text("start")
     await message.answer(text)
     
@@ -72,14 +88,11 @@ async def process_feedback(message: Message, state: FSMContext):
     # Здесь можно сохранить обратную связь в базу данных
     feedback_text = message.text
     
-    # Отправляем сообщение
-    feedback_request_text = get_booking_text("feedback_request")
-    await message.answer(feedback_request_text)
-    
     # Очищаем состояние
     await state.clear()
     
-    # Возвращаем в главное меню
+    # Отправляем сообщение благодарности с клавиатурой главного меню
+    feedback_thanks_text = get_booking_text("feedback_thanks")
     step_6_text = get_booking_text("step_6")
     menu_buttons = {
         "Обратная связь": "feedback",
@@ -89,6 +102,11 @@ async def process_feedback(message: Message, state: FSMContext):
         "Моя подписка": "my_subscription"
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
+    
+    # Отправляем благодарность
+    await message.answer(feedback_thanks_text)
+    
+    # Отправляем главное меню с клавиатурой
     await message.answer(step_6_text, reply_markup=menu_keyboard)
 
 
@@ -357,22 +375,53 @@ async def process_notification_time_input(message: Message, state: FSMContext):
             language_code=message.from_user.language_code,
         )
         repo.set_notification_time(user, touch_type, entered_time)
+        
+        # Получаем все три времени для формирования сообщения
+        def format_time(time_obj):
+            if not time_obj:
+                return "не установлено"
+            # Убираем ведущий ноль из часов (9.00 вместо 09.00)
+            hours = time_obj.hour
+            minutes = time_obj.minute
+            return f"{hours}.{minutes:02d}"
+        
+        morning_time = format_time(user.morning_notification_time)
+        day_time = format_time(user.day_notification_time)
+        evening_time = format_time(user.evening_notification_time)
+        
+        # Проверяем, все ли времена установлены (для первого визита)
+        all_times_set = (
+            user.morning_notification_time and
+            user.day_notification_time and
+            user.evening_notification_time
+        )
+        is_first_visit = user.is_first_visit
     finally:
         session.close()
 
-    confirmation = get_booking_text("notification_time_saved").format(
-        touch_label=touch_label,
-        time=entered_time.strftime("%H:%M"),
+    # Формируем новое сообщение с временами из БД
+    confirmation = (
+        "Спасибо! Время напоминаний изменено.\n"
+        "Бот будет присылать вам сообщения:\n\n"
+        f"Утром: в {morning_time}\n"
+        f"Днем: в {day_time}\n"
+        f"Вечером: в {evening_time}\n"
+        "по московскому времени."
     )
-    await message.answer(confirmation)
-
-    buttons = {
-        "Настроить ещё": "notification_customize",
-        "В главное меню": "back_to_menu",
-    }
+    
+    # Для первого визита, если все времена установлены, показываем "Продолжить"
+    if is_first_visit and all_times_set:
+        buttons = {
+            "Продолжить": "continue_after_notification",
+        }
+    else:
+        buttons = {
+            "Настроить бота": "bot_settings",
+            "В главное меню": "back_to_menu",
+        }
     keyboard = await keyboard_ops.create_keyboard(buttons=buttons, interval=1)
-    await message.answer("Выбери следующий шаг:", reply_markup=keyboard)
-    await state.set_state(NotificationSettingsStates.choosing_touch)
+    await message.answer(confirmation, reply_markup=keyboard)
+    await state.clear()
 
 
 @router.message(ProfileStates.waiting_for_name)
@@ -667,17 +716,24 @@ async def _process_touch_question_answer_internal(message: Message, state: FSMCo
             questions_list_from_redis = data.get("questions_list", [])
             current_question_index_from_redis = data.get("current_question_index", 0)
             
-            logger.info(f"[TOUCH_QUESTION] Данные из Redis: questions_list={len(questions_list_from_redis)}, current_question_index={current_question_index_from_redis}")
-            logger.info(f"[TOUCH_QUESTION] Список вопросов из Redis: {questions_list_from_redis}")
+            logger.info(f"[TOUCH_QUESTION] ===== ЗАГРУЗКА ДАННЫХ ИЗ REDIS (ГОЛОСОВОЕ) =====")
+            logger.info(f"[TOUCH_QUESTION] Ключ Redis: {data_key}")
+            logger.info(f"[TOUCH_QUESTION] Текущий индекс вопроса из Redis: {current_question_index_from_redis}")
+            logger.info(f"[TOUCH_QUESTION] Всего вопросов: {len(questions_list_from_redis)}")
+            if questions_list_from_redis and current_question_index_from_redis < len(questions_list_from_redis):
+                logger.info(f"[TOUCH_QUESTION] Текущий вопрос (индекс {current_question_index_from_redis}): {questions_list_from_redis[current_question_index_from_redis]}")
+            logger.info(f"[TOUCH_QUESTION] Список всех вопросов: {questions_list_from_redis}")
+            logger.info(f"[TOUCH_QUESTION] =================================================")
             
             # Сохраняем в state для использования
             await state.update_data(
                 touch_content_id=data.get("touch_content_id"),
                 questions_list=questions_list_from_redis,
                 current_question_index=current_question_index_from_redis,
-                answers=data.get("answers", [])
+                answers=data.get("answers", []),
+                telegram_id=message.from_user.id  # Сохраняем telegram_id для использования при обновлении
             )
-            logger.info(f"[TOUCH_QUESTION] Данные сохранены в state: questions_list={len(questions_list_from_redis)}, current_question_index={current_question_index_from_redis}")
+            logger.info(f"[TOUCH_QUESTION] Данные сохранены в state: questions_list={len(questions_list_from_redis)}, current_question_index={current_question_index_from_redis}, telegram_id={message.from_user.id}")
         else:
             logger.warning(f"[TOUCH_QUESTION] Данные не найдены в Redis по ключу {data_key}")
             # Пробуем найти все ключи с этим пользователем
@@ -768,7 +824,9 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
                     questions_list=questions_list,
                     current_question_index=current_question_index,
                     answers=answers,
-                    touch_content_id=data.get("touch_content_id")
+                    touch_content_id=data.get("touch_content_id"),
+                    reflection_mode=data.get("reflection_mode", False),
+                    telegram_id=message.from_user.id  # Сохраняем telegram_id для использования при обновлении
                 )
             else:
                 logger.warning(f"[TOUCH_QUESTION] Данные не найдены в Redis по ключу {data_key}")
@@ -779,10 +837,58 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
         except Exception as e:
             logger.error(f"[TOUCH_QUESTION] Ошибка при загрузке данных из Redis: {e}", exc_info=True)
     
+    # Проверяем, не в режиме ли рефлексии без вопросов
+    reflection_mode = data.get("reflection_mode", False)
     if not questions_list:
-        await message.answer("Ошибка: не найдены данные о вопросах. Попробуйте начать заново.")
-        await state.clear()
-        return
+        if reflection_mode:
+            # Пользователь отправил ответ на рефлексию, а вопросов нет
+            logger.info(f"[TOUCH_QUESTION] Ответ на рефлексию без вопросов получен: {answer_text[:200]}...")
+            
+            # Сохраняем ответ на рефлексию (можно добавить сохранение в БД)
+            # Отправляем благодарность и главное меню
+            await message.answer("Спасибо! Твоя рефлексия сохранена. Это поможет сформировать твою мини-стратегию.")
+            
+            # Очищаем состояние
+            await state.clear()
+            try:
+                import redis
+                from core.config import settings
+                
+                redis_client = redis.Redis(
+                    host=settings.redis_host,
+                    port=settings.redis_port,
+                    password=settings.redis_password,
+                    db=settings.redis_db,
+                    decode_responses=True
+                )
+                
+                bot_id = message.bot.id
+                telegram_id = message.from_user.id
+                state_key = f"fsm:{bot_id}:{telegram_id}:state"
+                data_key = f"fsm:{bot_id}:{telegram_id}:data"
+                redis_client.delete(state_key, data_key)
+                logger.info(f"[TOUCH_QUESTION] Данные очищены из Redis для пользователя {telegram_id}")
+            except Exception as e:
+                logger.error(f"[TOUCH_QUESTION] Ошибка при очистке данных из Redis: {e}", exc_info=True)
+            
+            # Отправляем главное меню
+            step_6_text = get_booking_text("step_6")
+            menu_keyboard = await keyboard_ops.create_keyboard(
+                buttons={
+                    "Обратная связь": "feedback",
+                    "О боте": "about_bot",
+                    "Стратегия дня": "day_strategy",
+                    "Настройка бота": "bot_settings",
+                    "Моя подписка": "my_subscription",
+                },
+                interval=2,
+            )
+            await message.answer(step_6_text, reply_markup=menu_keyboard)
+            return
+        else:
+            await message.answer("Ошибка: не найдены данные о вопросах. Попробуйте начать заново.")
+            await state.clear()
+            return
     
     # Получаем текущий вопрос для валидации
     if current_question_index >= len(questions_list):
@@ -801,6 +907,7 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
     question_number = current_question_index + 1  # Номер вопроса для пользователя (начинается с 1)
     logger.info(f"[TOUCH_QUESTION] Валидируем ответ на вопрос #{question_number} (индекс {current_question_index}): {current_question[:100]}...")
     logger.info(f"[TOUCH_QUESTION] Всего вопросов: {len(questions_list)}, список: {[q[:50] for q in questions_list]}")
+    logger.info(f"[TOUCH_QUESTION] Текст ответа пользователя: {answer_text[:200]}...")
     
     # Отправляем промежуточное сообщение, чтобы Telegram не отключался по таймауту
     validation_msg = await message.answer("🔄 Анализирую ваш ответ...")
@@ -816,23 +923,43 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
             "НЕ просто говори 'правильно' или 'неправильно', а объясни ЧТО именно не так или что можно улучшить. "
             "Если ответ хороший, укажи что именно хорошо. "
             "Если есть проблемы, конкретно укажи что не так и что нужно исправить. "
-            f"ВАЖНО: Пользователь отвечал именно на вопрос #{question_number}, не путай с другими вопросами."
+            f"ВАЖНО: Пользователь отвечал именно на вопрос #{question_number} '{current_question}', не путай с другими вопросами."
         )
         
-        logger.info(f"[TOUCH_QUESTION] Промпт для Qwen: Вопрос #{question_number}: {current_question[:50]}...")
+        logger.info(f"[TOUCH_QUESTION] ===== ОТПРАВКА В QWEN =====")
+        logger.info(f"[TOUCH_QUESTION] Вопрос #{question_number} (индекс {current_question_index}): {current_question}")
+        logger.info(f"[TOUCH_QUESTION] Ответ пользователя: {answer_text}")
+        logger.info(f"[TOUCH_QUESTION] Полный промпт для Qwen (первые 500 символов): {validation_prompt[:500]}...")
+        logger.info(f"[TOUCH_QUESTION] ============================")
         
         logger.info(f"[TOUCH_QUESTION] Отправляем ответ в Qwen для валидации")
         validation_result = await generate_qwen_response(validation_prompt)
-        logger.info(f"[TOUCH_QUESTION] Получено резюме от Qwen: {validation_result}")
+        logger.info(f"[TOUCH_QUESTION] Получено резюме от Qwen (длина: {len(validation_result) if validation_result else 0}): {validation_result[:200] if validation_result else 'None'}...")
+        
+        # Проверяем, что ответ не пустой
+        if not validation_result or not validation_result.strip():
+            logger.warning(f"[TOUCH_QUESTION] Qwen вернул пустой ответ, используем fallback")
+            validation_result = "Ответ получен и сохранён."
         
         # Удаляем промежуточное сообщение
         try:
             await validation_msg.delete()
-        except:
-            pass
+            logger.info(f"[TOUCH_QUESTION] Промежуточное сообщение удалено")
+        except Exception as del_exc:
+            logger.warning(f"[TOUCH_QUESTION] Не удалось удалить промежуточное сообщение: {del_exc}")
         
         # Показываем резюме пользователю
-        await message.answer(f"📝 Резюме по вашему ответу:\n\n{validation_result}")
+        try:
+            logger.info(f"[TOUCH_QUESTION] Отправляем резюме пользователю (длина текста: {len(validation_result)})")
+            await message.answer(f"📝 Резюме по вашему ответу:\n\n{validation_result}")
+            logger.info(f"[TOUCH_QUESTION] ✓ Резюме успешно отправлено пользователю")
+        except Exception as send_exc:
+            logger.error(f"[TOUCH_QUESTION] ✗ Ошибка при отправке резюме пользователю: {send_exc}", exc_info=True)
+            # Пробуем отправить хотя бы уведомление
+            try:
+                await message.answer("📝 Ваш ответ проанализирован и сохранён.")
+            except:
+                pass
     except Exception as e:
         logger.error(f"[TOUCH_QUESTION] Ошибка при валидации ответа через Qwen: {e}", exc_info=True)
         # Удаляем промежуточное сообщение
@@ -919,6 +1046,18 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
             
             bot_id = message.bot.id
             telegram_id = message.from_user.id
+            
+            # Проверяем, что telegram_id не равен bot_id (это было бы ошибкой)
+            if telegram_id == bot_id:
+                logger.error(f"[TOUCH_QUESTION] ОШИБКА: telegram_id ({telegram_id}) равен bot_id ({bot_id})! Это неправильно!")
+                # Пробуем получить telegram_id из state или из предыдущих данных
+                telegram_id_from_data = data.get("telegram_id")
+                if telegram_id_from_data and telegram_id_from_data != bot_id:
+                    logger.warning(f"[TOUCH_QUESTION] Используем telegram_id из данных: {telegram_id_from_data}")
+                    telegram_id = telegram_id_from_data
+                else:
+                    logger.error(f"[TOUCH_QUESTION] Не удалось найти правильный telegram_id! Используем message.from_user.id, но это может быть ошибкой.")
+            
             data_key = f"fsm:{bot_id}:{telegram_id}:data"
             
             # Обновляем данные в Redis с новым индексом
@@ -926,30 +1065,90 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
                 "touch_content_id": data.get("touch_content_id"),
                 "questions_list": questions_list,
                 "current_question_index": next_question_index,
-                "answers": answers
+                "answers": answers,
+                "telegram_id": telegram_id  # Сохраняем telegram_id для проверки
             }
+            logger.info(f"[TOUCH_QUESTION] ===== ОБНОВЛЕНИЕ ИНДЕКСА В REDIS =====")
+            logger.info(f"[TOUCH_QUESTION] bot_id: {bot_id}, telegram_id: {telegram_id}")
+            logger.info(f"[TOUCH_QUESTION] Ключ Redis: {data_key}")
+            logger.info(f"[TOUCH_QUESTION] Старый индекс: {current_question_index}, новый индекс: {next_question_index}")
+            logger.info(f"[TOUCH_QUESTION] Данные для сохранения: current_question_index={next_question_index}, questions_list={len(questions_list)}")
             redis_client.set(data_key, json.dumps(redis_data_to_save), ex=3600)
             logger.info(f"[TOUCH_QUESTION] Обновлен индекс в Redis: {next_question_index} (вопрос #{next_question_index + 1})")
             
             # Проверяем, что данные сохранились правильно
-            saved_data = json.loads(redis_client.get(data_key))
-            logger.info(f"[TOUCH_QUESTION] Проверка: сохраненный индекс в Redis = {saved_data.get('current_question_index')}")
+            saved_data_raw = redis_client.get(data_key)
+            if saved_data_raw:
+                saved_data = json.loads(saved_data_raw)
+                saved_index = saved_data.get('current_question_index')
+                logger.info(f"[TOUCH_QUESTION] Проверка: сохраненный индекс в Redis = {saved_index}")
+                logger.info(f"[TOUCH_QUESTION] Проверка: сохраненный список вопросов = {saved_data.get('questions_list', [])}")
+                if saved_index != next_question_index:
+                    logger.error(f"[TOUCH_QUESTION] ОШИБКА: Индекс не совпадает! Ожидалось: {next_question_index}, получено: {saved_index}")
+            else:
+                logger.error(f"[TOUCH_QUESTION] ОШИБКА: Данные не найдены в Redis после сохранения!")
+            logger.info(f"[TOUCH_QUESTION] ======================================")
         except Exception as e:
             logger.error(f"[TOUCH_QUESTION] Ошибка при обновлении индекса в Redis: {e}", exc_info=True)
     else:
         # Все вопросы отвечены
-        await message.answer("Спасибо за ответы! Мы собрали их в вашу личную карту стратегий.")
+        # Получаем telegram_id до очистки состояния
+        bot_id = message.bot.id
+        telegram_id = message.from_user.id
+        
+        # Проверяем, что telegram_id не равен bot_id
+        telegram_id_from_data = data.get("telegram_id")
+        if telegram_id == bot_id and telegram_id_from_data and telegram_id_from_data != bot_id:
+            telegram_id = telegram_id_from_data
+        
+        await message.answer("Твои ответы зафиксированы.")
+        
+        # Отправляем сообщение с кнопками
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        from core.config import settings
+        
+        keyboard_builder = InlineKeyboardBuilder()
+        
+        # Кнопка "Перейти в чат"
+        if settings.community_chat_url:
+            keyboard_builder.button(text="Перейти в чат", url=settings.community_chat_url)
+        else:
+            keyboard_builder.button(text="Перейти в чат", callback_data="chat_placeholder")
+        
+        # Кнопка "Продолжить"
+        keyboard_builder.button(text="Продолжить", callback_data="touch_questions_continue")
+        keyboard_builder.adjust(1, 1)
+        keyboard = keyboard_builder.as_markup()
+        
+        await message.answer(
+            "Посмотри, что пишут другие участники в чате, и поделись своим. Это часть общей лаборатории стратегий.",
+            reply_markup=keyboard
+        )
+        
+        # Очищаем состояние и данные из Redis после завершения всех вопросов
         await state.clear()
         
         # Очищаем данные из Redis
         try:
-            bot_id = message.bot.id
-            telegram_id = message.from_user.id
+            import redis
+            from core.config import settings
+            
+            redis_client = redis.Redis(
+                host=settings.redis_host,
+                port=settings.redis_port,
+                password=settings.redis_password,
+                db=settings.redis_db,
+                decode_responses=True
+            )
+            
             state_key = f"fsm:{bot_id}:{telegram_id}:state"
             data_key = f"fsm:{bot_id}:{telegram_id}:data"
+            
+            # Очищаем данные из Redis
             redis_client.delete(state_key, data_key)
-        except:
-            pass
+            logger.info(f"[TOUCH_QUESTION] Данные очищены из Redis для пользователя {telegram_id} после завершения вопросов")
+        except Exception as e:
+            logger.error(f"[TOUCH_QUESTION] Ошибка при очистке данных из Redis: {e}", exc_info=True)
 
 
 @router.message(F.voice)

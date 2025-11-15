@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Создание суперпользователя Django неинтерактивно"""
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Добавляем корневую директорию в путь
@@ -22,12 +22,17 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# Параметры суперпользователя
-USERNAME = "v01ce"
-EMAIL = "maksimagrig2@gmail.com"
-PASSWORD = "v01ce"  # ИЗМЕНИ ЭТОТ ПАРОЛЬ!
+# Параметры суперпользователя из переменных окружения
+USERNAME = os.getenv("DJANGO_SUPERUSER_USERNAME", "admin")
+EMAIL = os.getenv("DJANGO_SUPERUSER_EMAIL", "admin@example.com")
+PASSWORD = os.getenv("DJANGO_SUPERUSER_PASSWORD")  # Обязательно из .env!
 
 if __name__ == "__main__":
+    if not PASSWORD:
+        print("✗ Ошибка: DJANGO_SUPERUSER_PASSWORD не установлен в переменных окружения!")
+        print("  Установите переменную DJANGO_SUPERUSER_PASSWORD в .env файле")
+        sys.exit(1)
+    
     if User.objects.filter(username=USERNAME).exists():
         print(f"Пользователь '{USERNAME}' уже существует!")
         sys.exit(1)

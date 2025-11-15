@@ -37,10 +37,32 @@ def fetch_touch_content(
     touch_type: str,
     course_day: Optional[int],
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if course_day:
         content = repo.get_for_day(touch_type, course_day)
         if content:
+            logger.info(f"[TOUCH_UTILS] Найден контент для {touch_type}, день {course_day}: id={content.id}")
             return content
-    return repo.get_default(touch_type)
+        else:
+            logger.info(f"[TOUCH_UTILS] Контент не найден для {touch_type}, день {course_day}, пробуем дефолтный")
+    else:
+        logger.info(f"[TOUCH_UTILS] course_day=None для {touch_type}, пробуем дефолтный контент")
+    
+    # Пробуем получить дефолтный контент
+    default_content = repo.get_default(touch_type)
+    if default_content:
+        logger.info(f"[TOUCH_UTILS] Найден дефолтный контент для {touch_type}: id={default_content.id}")
+        return default_content
+    
+    # Если дефолтного нет, пробуем найти любой активный контент
+    logger.warning(f"[TOUCH_UTILS] Дефолтный контент не найден для {touch_type}, пробуем найти любой активный контент")
+    any_content = repo.get_any_active(touch_type)
+    if any_content:
+        logger.info(f"[TOUCH_UTILS] Найден активный контент для {touch_type}: id={any_content.id}, course_day_id={any_content.course_day_id}")
+    else:
+        logger.warning(f"[TOUCH_UTILS] Активный контент не найден для {touch_type}")
+    return any_content
 
 

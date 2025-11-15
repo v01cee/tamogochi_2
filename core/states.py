@@ -39,3 +39,12 @@ class TouchQuestionStates(StatesGroup):
     """Состояния для ответов на вопросы касания"""
     waiting_for_answer = State()  # Ожидание ответа на вопрос касания
     waiting_for_voice_confirmation = State()  # Ожидание подтверждения голосового сообщения
+
+
+class EveningRatingStates(StatesGroup):
+    """Состояния для вечерней оценки"""
+    rating_energy = State()  # Оценка уровня энергии (1/5)
+    rating_happiness = State()  # Оценка уровня счастья (2/5)
+    rating_progress = State()  # Оценка продвижения к результату/целям (3/5)
+    rating_question_4 = State()  # Вопрос 4/5
+    rating_question_5 = State()  # Вопрос 5/5

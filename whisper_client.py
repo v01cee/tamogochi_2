@@ -148,6 +148,7 @@ CLOUDRU_IAM_KEY = settings.cloudru_iam_key
 CLOUDRU_IAM_SECRET = settings.cloudru_iam_secret
 MODEL_URL = settings.whisper_model_url
 MODEL_NAME = settings.whisper_model_name
+IAM_TOKEN_URL = settings.cloud_iam_token_url
 
 # Проверяем наличие обязательных переменных для работы с API
 if not all([CLOUDRU_IAM_KEY, CLOUDRU_IAM_SECRET, MODEL_URL]):
@@ -166,8 +167,6 @@ async def get_bearer_token() -> str:
         Bearer токен для авторизации запросов
     """
     try:
-        token_url = "https://auth.iam.sbercloud.ru/auth/system/openid/token"
-        
         # Параметры для OAuth2 client_credentials flow
         data = {
             'grant_type': 'client_credentials',
@@ -176,7 +175,7 @@ async def get_bearer_token() -> str:
         }
         
         response = requests.post(
-            token_url,
+            IAM_TOKEN_URL,
             data=data,
             timeout=30
         )

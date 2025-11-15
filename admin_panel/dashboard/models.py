@@ -19,6 +19,8 @@ class TelegramUser(models.Model):
     created_at = models.DateTimeField("Создан")
     updated_at = models.DateTimeField("Обновлён")
     is_active = models.BooleanField("Активен", default=True)
+    is_first_visit = models.BooleanField("Первый визит", default=True)
+    notification_intro_seen = models.BooleanField("Видел вводное уведомление", default=False)
 
     class Meta:
         managed = False
@@ -71,7 +73,7 @@ class CourseDay(models.Model):
     updated_at = models.DateTimeField("Обновлён", auto_now=True, editable=False)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = "course_days"
         verbose_name = "День курса"
         verbose_name_plural = "Дни курса"
@@ -119,7 +121,7 @@ class TouchContent(models.Model):
     updated_at = models.DateTimeField("Обновлён", auto_now=True, editable=False)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = "touch_contents"
         verbose_name = "Контент касания"
         verbose_name_plural = "Контент касаний"

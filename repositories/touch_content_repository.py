@@ -47,5 +47,20 @@ class TouchContentRepository(BaseRepository[TouchContent]):
             )
         )
         return self.session.scalars(stmt).first()
+    
+    def get_any_active(self, touch_type: str) -> Optional[TouchContent]:
+        """Получить любой активный контент для touch_type, если дефолтного нет."""
+        stmt = (
+            select(TouchContent)
+            .where(
+                TouchContent.touch_type == touch_type,
+                TouchContent.is_active.is_(True),
+            )
+            .order_by(
+                TouchContent.order_index.asc(),
+                TouchContent.updated_at.desc(),
+            )
+        )
+        return self.session.scalars(stmt).first()
 
 

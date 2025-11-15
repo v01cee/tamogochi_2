@@ -21,12 +21,11 @@ class TouchContent(Base):
     """Контент для касаний (утро/день/вечер)."""
 
     __tablename__ = "touch_contents"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     course_day_id: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("public.course_days.id", ondelete="SET NULL"),
+        ForeignKey("course_days.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

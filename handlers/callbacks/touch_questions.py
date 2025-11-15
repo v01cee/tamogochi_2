@@ -52,14 +52,25 @@ async def callback_touch_voice_confirm(callback: CallbackQuery, state: FSMContex
         if redis_data:
             logger.info(f"[TOUCH_QUESTION] Загружаем данные из Redis в callback")
             data = json.loads(redis_data)
+            questions_list = data.get("questions_list", [])
+            current_question_index = data.get("current_question_index", 0)
+            logger.info(f"[TOUCH_QUESTION] ===== ЗАГРУЗКА ДАННЫХ ИЗ REDIS =====")
+            logger.info(f"[TOUCH_QUESTION] Ключ Redis: {data_key}")
+            logger.info(f"[TOUCH_QUESTION] Текущий индекс вопроса из Redis: {current_question_index}")
+            logger.info(f"[TOUCH_QUESTION] Всего вопросов: {len(questions_list)}")
+            if questions_list and current_question_index < len(questions_list):
+                logger.info(f"[TOUCH_QUESTION] Текущий вопрос (индекс {current_question_index}): {questions_list[current_question_index]}")
+            logger.info(f"[TOUCH_QUESTION] Список всех вопросов: {questions_list}")
+            logger.info(f"[TOUCH_QUESTION] =====================================")
             # Сохраняем в state для использования
             await state.update_data(
                 touch_content_id=data.get("touch_content_id"),
-                questions_list=data.get("questions_list", []),
-                current_question_index=data.get("current_question_index", 0),
-                answers=data.get("answers", [])
+                questions_list=questions_list,
+                current_question_index=current_question_index,
+                answers=data.get("answers", []),
+                telegram_id=callback.from_user.id  # Сохраняем telegram_id для использования при обновлении
             )
-            logger.info(f"[TOUCH_QUESTION] Данные загружены в callback: questions_list={len(data.get('questions_list', []))}")
+            logger.info(f"[TOUCH_QUESTION] Данные загружены в callback: questions_list={len(questions_list)}, current_question_index={current_question_index}, telegram_id={callback.from_user.id}")
     except Exception as e:
         logger.error(f"[TOUCH_QUESTION] Ошибка при загрузке данных из Redis в callback: {e}", exc_info=True)
     
@@ -117,4 +128,50 @@ async def callback_touch_voice_confirm(callback: CallbackQuery, state: FSMContex
             pass
         await callback.message.answer("Произошла ошибка при обработке голосового сообщения. Попробуйте отправить текстовое сообщение или повторите попытку позже.")
         await state.set_state(TouchQuestionStates.waiting_for_answer)
+
+
+@router.callback_query(F.data == "touch_questions_continue")
+async def callback_touch_questions_continue(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Продолжить' после завершения вопросов"""
+    await callback.answer()
+    
+    # Отправляем финальное сообщение
+    final_message = (
+        "Спасибо 🙌 Желаю прожить этот день с максимальным фокусом и осознанностью, "
+        "энергией и счастьем. Сделай себе кайфовый день! До встречи днём."
+    )
+    
+    # Кнопка "Главное меню"
+    menu_buttons = {
+        "Главное меню": "back_to_menu",
+    }
+    menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=1)
+    
+    await callback.message.answer(final_message, reply_markup=menu_keyboard)
+    
+    # Очищаем состояние и данные из Redis
+    await state.clear()
+    
+    try:
+        import redis
+        from core.config import settings
+        
+        redis_client = redis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            password=settings.redis_password,
+            db=settings.redis_db,
+            decode_responses=True
+        )
+        
+        bot_id = callback.bot.id
+        telegram_id = callback.from_user.id
+        state_key = f"fsm:{bot_id}:{telegram_id}:state"
+        data_key = f"fsm:{bot_id}:{telegram_id}:data"
+        
+        # Очищаем данные из Redis
+        redis_client.delete(state_key, data_key)
+        logger.info(f"[TOUCH_QUESTION] Данные очищены из Redis для пользователя {telegram_id}")
+    except Exception as e:
+        logger.error(f"[TOUCH_QUESTION] Ошибка при очистке данных из Redis: {e}", exc_info=True)
 

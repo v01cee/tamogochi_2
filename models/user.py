@@ -16,7 +16,6 @@ class User(Base):
     """Модель пользователя Telegram"""
 
     __tablename__ = "users"
-    __table_args__ = {"schema": "public"}
 
     telegram_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -81,6 +80,16 @@ class User(Base):
     )
 
     morning_touch_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+    
+    day_touch_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+    
+    evening_touch_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True
     )

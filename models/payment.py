@@ -16,9 +16,8 @@ class Payment(Base):
     """Платёж пользователя через Robokassa."""
 
     __tablename__ = "payments"
-    __table_args__ = {"schema": "public"}
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("public.users.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     invoice_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="RUB", nullable=False)

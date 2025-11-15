@@ -12,7 +12,6 @@ class CourseDay(Base):
     """День курса с контентом касаний."""
 
     __tablename__ = "course_days"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     day_number: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)

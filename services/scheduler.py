@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 
 from core.config import settings
 from services.morning_touch import send_morning_touch
 from services.day_touch import send_day_touch
 from services.evening_touch import send_evening_touch
+from services.qwen_warmup import warmup_qwen_model, keep_qwen_warm, warmup_whisper_model, keep_whisper_warm
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +49,50 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Keep-alive запросы к Qwen каждые 5 минут, чтобы модель не "засыпала"
+    scheduler.add_job(
+        keep_qwen_warm,
+        trigger=CronTrigger(minute="*/5"),  # Каждые 5 минут
+        id="qwen_keep_alive",
+        replace_existing=True,
+    )
+
+    # Прогрев моделей Qwen и Whisper при старте (одноразовые задачи через 10 и 20 секунд)
+    tz = ZoneInfo(settings.timezone)
+    qwen_warmup_time = datetime.now(tz=tz) + timedelta(seconds=10)
+    whisper_warmup_time = datetime.now(tz=tz) + timedelta(seconds=20)  # Чуть позже, чтобы не перегружать
+    
+    scheduler.add_job(
+        warmup_qwen_model,
+        trigger=DateTrigger(run_date=qwen_warmup_time),
+        id="qwen_warmup_startup",
+        replace_existing=True,
+        max_instances=1,
+    )
+    
+    scheduler.add_job(
+        warmup_whisper_model,
+        trigger=DateTrigger(run_date=whisper_warmup_time),
+        id="whisper_warmup_startup",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Keep-alive для Whisper каждые 15 минут (реже, чем Qwen, так как используется реже)
+    scheduler.add_job(
+        keep_whisper_warm,
+        trigger=CronTrigger(minute="*/15"),  # Каждые 15 минут
+        id="whisper_keep_alive",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("Планировщик задач запущен (часовой пояс %s)", settings.timezone)
+    logger.info("🔥 Запланирован прогрев модели Qwen через 10 секунд после старта")
+    logger.info("🎤 Запланирован прогрев модели Whisper через 20 секунд после старта")
+    logger.info("🔥 Keep-alive для модели Qwen каждые 5 минут")
+    logger.info("🎤 Keep-alive для модели Whisper каждые 15 минут")
+    
     return scheduler
 
 

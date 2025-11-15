@@ -7,15 +7,19 @@ from sqlalchemy.pool import NullPool
 from core.config import settings
 
 
+connect_args = {}
+if not settings.db_url.startswith("sqlite"):
+    connect_args = {
+        "connect_timeout": 10,  # Таймаут подключения 10 секунд
+        "options": "-c statement_timeout=30000",  # Таймаут запросов 30 секунд
+    }
+
 engine = create_engine(
     settings.db_url,
     poolclass=NullPool,
     echo=settings.debug,
     future=True,
-    connect_args={
-        "connect_timeout": 10,  # Таймаут подключения 10 секунд
-        "options": "-c statement_timeout=30000",  # Таймаут запросов 30 секунд
-    },
+    connect_args=connect_args,
     pool_pre_ping=True,  # Проверка соединения перед использованием
 )
 

@@ -13,9 +13,9 @@ from core.config import settings as core_settings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-change-me"  # TODO: перенести в .env при необходимости
+SECRET_KEY = core_settings.secret_key
 
-DEBUG = True  # Включаем для разработки, чтобы статика работала
+DEBUG = core_settings.debug
 
 ALLOWED_HOSTS: list[str] = ["*"]
 
@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "storages",
     "dashboard",
     "payments",
 ]
@@ -62,60 +63,18 @@ TEMPLATES = [
 WSGI_APPLICATION = "admin_panel.wsgi.application"
 
 
-def _build_database_config() -> dict[str, Any]:
-    """Преобразование SQLAlchemy database_url из core.settings в формат Django."""
-    url = make_url(core_settings.db_url)
-    engine_mapping = {
-        "postgresql": "django.db.backends.postgresql",
-        "postgresql+psycopg2": "django.db.backends.postgresql",
-        "sqlite": "django.db.backends.sqlite3",
-        "sqlite+pysqlite": "django.db.backends.sqlite3",
-    }
-    engine = engine_mapping.get(url.drivername)
-    if engine is None:  # pragma: no cover - защитная ветка
-        raise ValueError(f"Неподдерживаемый драйвер БД для Django: {url.drivername}")
-
-    db_config = {
-        "ENGINE": engine,
-        "NAME": url.database or "",
-        "USER": url.username or "",
-        "PASSWORD": url.password or "",
-        "HOST": url.host or "",
-        "PORT": str(url.port or ""),
-    }
-    
-    # Настройки подключения для PostgreSQL
-    options = {}
-    
-    # Добавляем search_path только если схема указана и не пустая
-    if core_settings.db_schema_name:
-        options["options"] = f"-c search_path={core_settings.db_schema_name}"
-    
-    # Параметры подключения для стабильности
-    if not options:
-        options = {}
-    
-    # Параметры для psycopg2 через OPTIONS
-    # connect_timeout - таймаут подключения в секундах
-    # sslmode - режим SSL (disable, allow, prefer, require, verify-ca, verify-full)
-    # Попробуем сначала без SSL, если не работает - изменим на require
-    options["connect_timeout"] = "30"
-    options["sslmode"] = "prefer"  # Пробуем с SSL, но не требуем его
-    
-    db_config["OPTIONS"] = options
-    
-    # Дополнительные параметры для подключения
-    db_config["CONN_MAX_AGE"] = 0  # Не использовать постоянные соединения
-    db_config["ATOMIC_REQUESTS"] = False
-    
-    # Таймаут подключения (в секундах) - передается напрямую в psycopg2
-    # Это должно помочь с проблемой timeout expired
-    
-    return db_config
-
-
 DATABASES = {
-    "default": _build_database_config(),
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": core_settings.postgres_db,
+        "USER": core_settings.postgres_user,
+        "PASSWORD": core_settings.postgres_password,
+        "HOST": core_settings.postgres_host,
+        "PORT": core_settings.postgres_port,
+        "OPTIONS": {
+            "options": "-c statement_timeout=30000",
+        },
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -241,4 +200,13 @@ JAZZMIN_UI_TWEAKS = {
     "actions_sticky_top": False
 }
 
+
+DEFAULT_FILE_STORAGE = "admin_panel.dashboard.storage.MediaStorage"
+STATICFILES_STORAGE = "admin_panel.dashboard.storage.StaticStorage"
+
+AWS_S3_ENDPOINT_URL = core_settings.aws_s3_endpoint_url
+AWS_STORAGE_BUCKET_NAME = core_settings.aws_storage_bucket_name
+AWS_ACCESS_KEY_ID = core_settings.aws_access_key_id
+AWS_SECRET_ACCESS_KEY = core_settings.aws_secret_access_key
+AWS_QUERYSTRING_AUTH = core_settings.aws_querystring_auth
 

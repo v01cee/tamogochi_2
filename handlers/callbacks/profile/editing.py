@@ -76,8 +76,9 @@ async def callback_confirm_profile_personal_data(callback: CallbackQuery, state:
             value = data.get(field)
             if value:
                 update_payload[field] = value
-        if update_payload:
-            user_repo.update(user.id, **update_payload)
+        # Устанавливаем is_first_visit = False, так как пользователь завершил онбординг
+        update_payload["is_first_visit"] = False
+        user_repo.update(user.id, **update_payload)
     finally:
         session.close()
 
@@ -90,17 +91,6 @@ async def callback_confirm_profile_personal_data(callback: CallbackQuery, state:
         interval=1,
     )
     await callback.message.answer(start_info_text, reply_markup=start_keyboard)
-    
-    # Устанавливаем is_first_visit = False после успешной отправки сообщения
-    session = next(get_session())
-    try:
-        user_repo = UserRepository(session)
-        user = user_repo.get_by_telegram_id(callback.from_user.id)
-        if user:
-            user_repo.update(user.id, is_first_visit=False)
-    finally:
-        session.close()
-    
     await callback.answer()
 
 

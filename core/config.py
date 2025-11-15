@@ -17,56 +17,59 @@ class Settings(BaseSettings):
 
     # Database
     database_url: Optional[str] = None
-    postgres_host: str = "109.73.202.83"
-    postgres_port: int = 5435
-    postgres_user: str = "admin"
-    postgres_password: str = "123b1h23b1kgasfbasfas123"
-    postgres_db: str = "testing_postgres"
+    postgres_host: str
+    postgres_port: int = 5432
+    postgres_user: str
+    postgres_password: str
+    postgres_db: str
     db_schema_name: str = "public"
 
     # Redis
     redis_url: Optional[str] = None
-    redis_host: str = "109.73.202.83"
-    redis_port: int = 6700
-    redis_password: Optional[str] = "An0th3rStr0ngR3disP@ss"
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_password: Optional[str] = None
     redis_db: int = 0
 
     # Telegram Bot
-    bot_token: str = "8571264937:AAEKtzODxcWczIL4RTdqGosdt2gsFROElPs"
+    bot_token: str
+
+    # Django
+    secret_key: str
 
     # Application
-    app_name: str = "tamogochi_2"
+    app_name: str = "app"
     app_port: int = 8042
     debug: bool = False
     timezone: str = "Europe/Moscow"
     media_root: str = "media"
 
     # Robokassa
-    robokassa_shop_id: str = "happinesscourse"
-    robokassa_password1: str = "lpDr4hE1dSCuq8Ts34eH"
-    robokassa_password2: str = "N7bN3Iqw4gsNZaVx2v5N"
+    robokassa_shop_id: str
+    robokassa_password1: str
+    robokassa_password2: str
     robokassa_is_test: bool = True
     robokassa_base_url: str = "https://auth.robokassa.ru/Merchant/Index.aspx"
-    robokassa_success_url: str | None = "https://example.com/payments/success"
-    robokassa_fail_url: str | None = "https://example.com/payments/fail"
+    robokassa_success_url: str | None = None
+    robokassa_fail_url: str | None = None
     robokassa_result_secret: str | None = None
 
     # Community
     community_chat_url: str | None = None
 
     # Cloud.ru API (Whisper)
-    cloudru_iam_key: str = "c58abbc2dec1a95792855148490e4f30"
-    cloudru_iam_secret: str = "bcfc161c3f9ad95935b1f448e8ce6a91"
-    whisper_model_url: str = "https://4b58beb9-6f1b-4f73-ba39-064e7f180db3.modelrun.inference.cloud.ru"
+    cloudru_iam_key: str
+    cloudru_iam_secret: str
+    whisper_model_url: str
     whisper_model_name: str = "model-run-wxryh-soft"
 
     # Cloud.ru API (Qwen)
-    cloud_public_url: str = "https://736bb669-5df9-42d5-8df6-1170ef1b9a4e.modelrun.inference.cloud.ru"
+    cloud_public_url: str
     # Попробуем разные варианты моделей (если одна не работает, можно попробовать другую):
     # "library/qwen2.5:14b" - текстовая модель 14B параметров
     # "library/qwen2.5:7b" - текстовая модель 7B параметров (быстрее)
     # "library/qwen2.5vl:32b" - vision-language модель 32B (медленнее, но была рабочей)
-    qwen_model: str = "library/qwen2.5vl:32b"  # Возвращаем рабочую модель (дообучающаяся, долго стартует)
+    qwen_model: str = "library/qwen2.5vl:32b"
     system_prompt: str = "Ты - полезный ассистент. Отвечай на русском языке."
     qwen_max_tokens: int = 512
     qwen_temperature: float = 0.2
@@ -77,6 +80,13 @@ class Settings(BaseSettings):
     qwen_length_penalty: float = 1.0
     cloud_timeout: int = 300  # 5 минут - модель долго стартует (до 3 минут на первых запусках)
     cloud_iam_token_url: str = "https://auth.iam.sbercloud.ru/auth/system/openid/token"
+
+    # AWS S3 (для Django admin panel)
+    aws_s3_endpoint_url: str
+    aws_storage_bucket_name: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_querystring_auth: bool = True
 
     # Python
     python_version: str = "3.12"

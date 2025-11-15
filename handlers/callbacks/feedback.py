@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
@@ -8,6 +10,17 @@ from core.texts import get_booking_text
 
 router = Router()
 keyboard_ops = KeyboardOperations()
+logger = logging.getLogger(__name__)
+
+
+@router.callback_query.middleware()
+async def log_callback_queries(handler, event: CallbackQuery, data: dict):
+    """Middleware для логирования всех callback queries"""
+    logger.info(
+        f"[CALLBACK] Пользователь {event.from_user.id} (@{event.from_user.username}) "
+        f"нажал кнопку: {event.data}"
+    )
+    return await handler(event, data)
 
 
 @router.callback_query(F.data == "feedback")
