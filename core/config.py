@@ -17,12 +17,11 @@ class Settings(BaseSettings):
 
     # Database
     database_url: Optional[str] = None
-<<<<<<< HEAD
-    postgres_host: str
+    postgres_host: str = ""
     postgres_port: int = 5432
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
+    postgres_user: str = ""
+    postgres_password: str = ""
+    postgres_db: str = ""
     db_schema_name: str = "public"
 
     # Redis
@@ -33,28 +32,10 @@ class Settings(BaseSettings):
     redis_db: int = 0
 
     # Telegram Bot
-    bot_token: str
+    bot_token: str = ""
 
     # Django
-    secret_key: str
-=======
-    postgres_host: str = ""
-    postgres_port: int = 5435
-    postgres_user: str = ""
-    postgres_password: str = ""
-    postgres_db: str = ""
-    db_schema_name: str = ""
-
-    # Redis
-    redis_url: Optional[str] = None
-    redis_host: str = ""
-    redis_port: int = 
-    redis_password: Optional[str] = ""
-    redis_db: int = 0
-
-    # Telegram Bot
-    bot_token: str = ""
->>>>>>> 564850369209a2a3187182ea8e551be21efd3eed
+    secret_key: str = ""
 
     # Application
     app_name: str = "app"
@@ -64,9 +45,9 @@ class Settings(BaseSettings):
     media_root: str = "media"
 
     # Robokassa
-    robokassa_shop_id: str
-    robokassa_password1: str
-    robokassa_password2: str
+    robokassa_shop_id: str = ""
+    robokassa_password1: str = ""
+    robokassa_password2: str = ""
     robokassa_is_test: bool = True
     robokassa_base_url: str = "https://auth.robokassa.ru/Merchant/Index.aspx"
     robokassa_success_url: str | None = None
@@ -77,13 +58,13 @@ class Settings(BaseSettings):
     community_chat_url: str | None = None
 
     # Cloud.ru API (Whisper)
-    cloudru_iam_key: str
-    cloudru_iam_secret: str
-    whisper_model_url: str
+    cloudru_iam_key: str = ""
+    cloudru_iam_secret: str = ""
+    whisper_model_url: str = ""
     whisper_model_name: str = "model-run-wxryh-soft"
 
     # Cloud.ru API (Qwen)
-    cloud_public_url: str
+    cloud_public_url: str = ""
     # Попробуем разные варианты моделей (если одна не работает, можно попробовать другую):
     # "library/qwen2.5:14b" - текстовая модель 14B параметров
     # "library/qwen2.5:7b" - текстовая модель 7B параметров (быстрее)
@@ -101,10 +82,10 @@ class Settings(BaseSettings):
     cloud_iam_token_url: str = "https://auth.iam.sbercloud.ru/auth/system/openid/token"
 
     # AWS S3 (для Django admin panel)
-    aws_s3_endpoint_url: str
-    aws_storage_bucket_name: str
-    aws_access_key_id: str
-    aws_secret_access_key: str
+    aws_s3_endpoint_url: str = ""
+    aws_storage_bucket_name: str = ""
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
     aws_querystring_auth: bool = True
 
     # Python

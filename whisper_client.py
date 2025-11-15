@@ -355,17 +355,22 @@ async def transcribe_via_direct_http(audio_data: bytes, audio_format: str = "ogg
         logger.debug(f"Заголовки: {auth_headers}")
         logger.info("Внимание: Whisper может долго обрабатывать аудио (до 5-10 минут), это нормально")
         
-        # Пробуем несколько раз с ретраями (модель может долго стартовать)
-        max_retries = 2
-        retry_delay = 10  # секунд между попытками
+        # Пробуем несколько раз с ретраями (serverless модель может долго стартовать после 5 минут простоя)
+        # Для serverless моделей увеличиваем количество попыток, так как машина может отключаться
+        max_retries = 5  # Увеличено до 5 попыток (всего 6) для serverless режима
+        retry_delay = 10  # Задержка между попытками (секунды)
+        timeout_retry_delay = 20  # Большая задержка после таймаута (модель может стартовать)
         timeout = 600  # 10 минут - покрываем общее время обработки (Whisper + Qwen)
         
         response = None
+        last_exception = None
         for attempt in range(max_retries + 1):
             try:
                 if attempt > 0:
-                    logger.info(f"Повторная попытка {attempt}/{max_retries} через {retry_delay} секунд...")
-                    time.sleep(retry_delay)
+                    # После таймаута делаем большую задержку, так как модель может стартовать
+                    delay = timeout_retry_delay if isinstance(last_exception, requests.exceptions.Timeout) else retry_delay
+                    logger.info(f"Повторная попытка {attempt}/{max_retries} через {delay} секунд...")
+                    time.sleep(delay)
                 
                 response = requests.post(
                     transcription_url,
@@ -377,17 +382,23 @@ async def transcribe_via_direct_http(audio_data: bytes, audio_format: str = "ogg
                 break  # Успешно, выходим из цикла
                 
             except requests.exceptions.Timeout:
+                last_exception = requests.exceptions.Timeout()
                 if attempt < max_retries:
                     logger.warning(f"Таймаут при запросе к Whisper API (попытка {attempt + 1}/{max_retries + 1}). "
-                                 f"Модель может еще обрабатывать. Повторяем...")
+                                 f"Serverless модель может стартовать после простоя. Повторяем через {timeout_retry_delay} секунд...")
                     continue
                 else:
                     logger.error(f"Таймаут при запросе к Whisper API после {max_retries + 1} попыток. "
                                f"Модель не отвечает за {timeout}s.")
                     raise
             except Exception as e:
+                last_exception = e
                 logger.error(f"Ошибка при запросе к Whisper API: {e}")
-                raise
+                if attempt < max_retries:
+                    logger.info(f"Повторяем попытку через {retry_delay} секунд...")
+                    continue
+                else:
+                    raise
         
         logger.info(f"Получен ответ со статусом {response.status_code}")
         
