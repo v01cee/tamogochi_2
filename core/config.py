@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: Optional[str] = None
+<<<<<<< HEAD
     postgres_host: str
     postgres_port: int = 5432
     postgres_user: str
@@ -36,6 +37,24 @@ class Settings(BaseSettings):
 
     # Django
     secret_key: str
+=======
+    postgres_host: str = ""
+    postgres_port: int = 5435
+    postgres_user: str = ""
+    postgres_password: str = ""
+    postgres_db: str = ""
+    db_schema_name: str = ""
+
+    # Redis
+    redis_url: Optional[str] = None
+    redis_host: str = ""
+    redis_port: int = 
+    redis_password: Optional[str] = ""
+    redis_db: int = 0
+
+    # Telegram Bot
+    bot_token: str = ""
+>>>>>>> 564850369209a2a3187182ea8e551be21efd3eed
 
     # Application
     app_name: str = "app"
