@@ -5,6 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import limited_aiogram
 from aiogram import Bot
 from aiogram.exceptions import (
     TelegramAPIError,
@@ -12,6 +13,9 @@ from aiogram.exceptions import (
     TelegramForbiddenError,
     TelegramRetryAfter,
 )
+
+# Пропатчиваем Bot для автоматического контроля лимитов Telegram API
+limited_aiogram.patch_bot()
 
 logger = logging.getLogger(__name__)
 

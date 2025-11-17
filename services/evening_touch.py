@@ -124,18 +124,14 @@ async def send_evening_touch(bot: Bot) -> None:
             logger.warning("Не удалось отправить вечернее сообщение %s: %s", telegram_id, exc)
             return False
 
-    # Отправляем с задержкой 0.6 секунды между пользователями для соблюдения лимитов Telegram
+    # Создаем задачи для параллельной отправки (limited-aiogram автоматически контролирует лимиты)
     sent_user_ids: List[int] = []
     tasks = []
     
-    for idx, (user_id, telegram_id) in enumerate(filtered_users):
+    for user_id, telegram_id in filtered_users:
         # Создаем задачу для отправки
         task = asyncio.create_task(send_to_user(user_id, telegram_id))
         tasks.append((user_id, task))
-        
-        # Задержка 0.6 секунды между отправками (кроме последней)
-        if idx < len(filtered_users) - 1:
-            await asyncio.sleep(0.6)
 
     # Ждем завершения всех задач параллельно
     results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
