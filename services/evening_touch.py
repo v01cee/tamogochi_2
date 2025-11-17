@@ -87,12 +87,21 @@ async def send_evening_touch(bot: Bot) -> None:
 
     target_time = now.time().replace(second=0, microsecond=0)
 
-    sent_user_ids: List[int] = []
-    for user_id, telegram_id, user_time in users:
-        effective_time = user_time or DEFAULT_EVENING_TIME
-        if effective_time != target_time:
-            continue
+    # Фильтруем пользователей по времени
+    filtered_users = [
+        (user_id, telegram_id)
+        for user_id, telegram_id, user_time in users
+        if (user_time or DEFAULT_EVENING_TIME) == target_time
+    ]
 
+    if not filtered_users:
+        logger.info("Вечернее касание: нет пользователей для отправки в это время")
+        return
+
+    logger.info("Вечернее касание: отправляем %s пользователям (после фильтрации по времени)", len(filtered_users))
+
+    async def send_to_user(user_id: int, telegram_id: int) -> bool:
+        """Отправить сообщение одному пользователю."""
         try:
             content = await asyncio.to_thread(
                 _get_content_for_user,
@@ -102,7 +111,7 @@ async def send_evening_touch(bot: Bot) -> None:
 
             if not content:
                 logger.warning("Нет контента для вечернего касания (user %s)", user_id)
-                continue
+                return False
 
             # Отправляем видео или описание
             await _send_evening_content(bot, telegram_id, content)
@@ -110,9 +119,32 @@ async def send_evening_touch(bot: Bot) -> None:
             # Отправляем первый вопрос оценки
             await _send_first_rating_question(bot, telegram_id, bot_id=bot_id, touch_content_id=content.id)
             
-            sent_user_ids.append(user_id)
+            return True
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Не удалось отправить вечернее сообщение %s: %s", telegram_id, exc)
+            return False
+
+    # Отправляем с задержкой 0.6 секунды между пользователями для соблюдения лимитов Telegram
+    sent_user_ids: List[int] = []
+    tasks = []
+    
+    for idx, (user_id, telegram_id) in enumerate(filtered_users):
+        # Создаем задачу для отправки
+        task = asyncio.create_task(send_to_user(user_id, telegram_id))
+        tasks.append((user_id, task))
+        
+        # Задержка 0.6 секунды между отправками (кроме последней)
+        if idx < len(filtered_users) - 1:
+            await asyncio.sleep(0.6)
+
+    # Ждем завершения всех задач параллельно
+    results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
+    
+    for (user_id, _), result in zip(tasks, results):
+        if isinstance(result, Exception):
+            logger.warning("Ошибка при отправке пользователю %s: %s", user_id, result)
+        elif result is True:
+            sent_user_ids.append(user_id)
 
     await asyncio.to_thread(_mark_users_sent, sent_user_ids, now)
     logger.info("Вечернее касание: отправлено %s сообщений", len(sent_user_ids))
