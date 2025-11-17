@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import limited_aiogram
 from aiogram import Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -8,7 +9,6 @@ from core.config import settings
 from handlers.start import router as start_router
 from handlers.callbacks import router as callbacks_router
 from services.scheduler import setup_scheduler
-from services.safe_bot import SafeBot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Основная функция запуска бота"""
-    bot = SafeBot(
+    # Используем LimitedBot для автоматического контроля лимитов Telegram API
+    bot = limited_aiogram.LimitedBot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )

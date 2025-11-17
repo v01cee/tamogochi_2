@@ -6,16 +6,12 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import limited_aiogram
-from aiogram import Bot
 from aiogram.exceptions import (
     TelegramAPIError,
     TelegramBadRequest,
     TelegramForbiddenError,
     TelegramRetryAfter,
 )
-
-# Пропатчиваем Bot для автоматического контроля лимитов Telegram API
-limited_aiogram.patch_bot()
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +89,14 @@ async def _safe_telegram_call(
         await asyncio.sleep(backoff)
 
 
-class SafeBot(Bot):
-    """Расширение Bot с повторными попытками при отправке сообщений/медиа."""
+class SafeBot(limited_aiogram.LimitedBot):
+    """Расширение LimitedBot с повторными попытками при отправке сообщений/медиа.
+    
+    LimitedBot автоматически контролирует лимиты Telegram API:
+    - 30 сообщений/сек для нескольких пользователей
+    - 20 запросов/сек для групп
+    - 1 сообщение/сек для индивидуального чата
+    """
 
     async def send_message(self, chat_id: int | str, text: str, **kwargs: Any) -> Any:  # type: ignore[override]
         return await _safe_telegram_call(

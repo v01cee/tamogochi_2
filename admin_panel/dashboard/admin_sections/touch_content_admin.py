@@ -12,7 +12,6 @@ from aiogram.types import FSInputFile
 from django.contrib import admin, messages
 
 from core.config import settings
-from services.safe_bot import SafeBot
 from ..models import TouchContent
 
 
@@ -77,7 +76,8 @@ class TouchContentAdmin(admin.ModelAdmin):
             from models.user import User
 
             async def run_send():
-                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                import limited_aiogram
+                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 bot_info = await bot.get_me()
                 bot_id = bot_info.id
 

@@ -10,7 +10,6 @@ from aiogram.enums import ParseMode
 from django.contrib import admin, messages
 
 from core.config import settings
-from services.safe_bot import SafeBot
 from ..models import QuizResult, TelegramUser
 
 
@@ -191,7 +190,8 @@ class TelegramUserAdmin(admin.ModelAdmin):
             from services.morning_touch import _get_content_for_user, _send_touch_content, _mark_users_sent
 
             async def run_touch():
-                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                import limited_aiogram
+                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     tz = ZoneInfo(settings.timezone)
                     now = datetime.now(tz=tz)
@@ -241,7 +241,8 @@ class TelegramUserAdmin(admin.ModelAdmin):
             from core.texts import TEXTS
 
             async def run_touch():
-                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                import limited_aiogram
+                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     tz = ZoneInfo(settings.timezone)
                     now = datetime.now(tz=tz)
@@ -288,7 +289,8 @@ class TelegramUserAdmin(admin.ModelAdmin):
             from services.evening_touch import _get_content_for_user, _send_evening_content, _send_first_rating_question
 
             async def run_touch():
-                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                import limited_aiogram
+                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     bot_info = await bot.get_me()
                     bot_id = bot_info.id
