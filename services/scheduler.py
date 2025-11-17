@@ -13,7 +13,7 @@ from core.config import settings
 from services.morning_touch import send_morning_touch
 from services.day_touch import send_day_touch
 from services.evening_touch import send_evening_touch
-from services.qwen_warmup import warmup_qwen_model, keep_qwen_warm, warmup_whisper_model, keep_whisper_warm
+from services.qwen_warmup import warmup_whisper_model, keep_whisper_warm
 
 logger = logging.getLogger(__name__)
 
@@ -49,26 +49,9 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Keep-alive запросы к Qwen каждые 5 минут, чтобы модель не "засыпала"
-    scheduler.add_job(
-        keep_qwen_warm,
-        trigger=CronTrigger(minute="*/5"),  # Каждые 5 минут
-        id="qwen_keep_alive",
-        replace_existing=True,
-    )
-
-    # Прогрев моделей Qwen и Whisper при старте (одноразовые задачи через 10 и 20 секунд)
+    # Прогрев модели Whisper при старте (одноразовая задача через 20 секунд)
     tz = ZoneInfo(settings.timezone)
-    qwen_warmup_time = datetime.now(tz=tz) + timedelta(seconds=10)
-    whisper_warmup_time = datetime.now(tz=tz) + timedelta(seconds=20)  # Чуть позже, чтобы не перегружать
-    
-    scheduler.add_job(
-        warmup_qwen_model,
-        trigger=DateTrigger(run_date=qwen_warmup_time),
-        id="qwen_warmup_startup",
-        replace_existing=True,
-        max_instances=1,
-    )
+    whisper_warmup_time = datetime.now(tz=tz) + timedelta(seconds=20)
     
     scheduler.add_job(
         warmup_whisper_model,
@@ -88,9 +71,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
 
     scheduler.start()
     logger.info("Планировщик задач запущен (часовой пояс %s)", settings.timezone)
-    logger.info("🔥 Запланирован прогрев модели Qwen через 10 секунд после старта")
     logger.info("🎤 Запланирован прогрев модели Whisper через 20 секунд после старта")
-    logger.info("🔥 Keep-alive для модели Qwen каждые 5 минут")
     logger.info("🎤 Keep-alive для модели Whisper каждые 15 минут")
     
     return scheduler

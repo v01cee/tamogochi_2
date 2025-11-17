@@ -5,8 +5,12 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from django.contrib import admin, messages
 
+from core.config import settings
+from services.safe_bot import SafeBot
 from ..models import QuizResult, TelegramUser
 
 
@@ -184,14 +188,10 @@ class TelegramUserAdmin(admin.ModelAdmin):
     def send_morning_touch_test(self, request, queryset):
         """Отправить утреннее касание выбранным пользователям (для теста, без проверки времени)"""
         try:
-            from aiogram import Bot
-            from aiogram.client.default import DefaultBotProperties
-            from aiogram.enums import ParseMode
-            from core.config import settings
             from services.morning_touch import _get_content_for_user, _send_touch_content, _mark_users_sent
 
             async def run_touch():
-                bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     tz = ZoneInfo(settings.timezone)
                     now = datetime.now(tz=tz)
@@ -237,15 +237,11 @@ class TelegramUserAdmin(admin.ModelAdmin):
     def send_day_touch_test(self, request, queryset):
         """Отправить дневное касание всем активным пользователям (для теста, без проверки времени)"""
         try:
-            from aiogram import Bot
-            from aiogram.client.default import DefaultBotProperties
-            from aiogram.enums import ParseMode
-            from core.config import settings
             from services.day_touch import _get_content_for_user, _build_day_keyboard
             from core.texts import TEXTS
 
             async def run_touch():
-                bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     tz = ZoneInfo(settings.timezone)
                     now = datetime.now(tz=tz)
@@ -289,14 +285,10 @@ class TelegramUserAdmin(admin.ModelAdmin):
     def send_evening_touch_test(self, request, queryset):
         """Отправить вечернее касание всем активным пользователям (для теста, без проверки времени)"""
         try:
-            from aiogram import Bot
-            from aiogram.client.default import DefaultBotProperties
-            from aiogram.enums import ParseMode
-            from core.config import settings
             from services.evening_touch import _get_content_for_user, _send_evening_content, _send_first_rating_question
 
             async def run_touch():
-                bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     bot_info = await bot.get_me()
                     bot_id = bot_info.id

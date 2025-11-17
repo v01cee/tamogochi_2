@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
+from aiogram import Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -8,6 +8,7 @@ from core.config import settings
 from handlers.start import router as start_router
 from handlers.callbacks import router as callbacks_router
 from services.scheduler import setup_scheduler
+from services.safe_bot import SafeBot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Основная функция запуска бота"""
-    bot = Bot(
+    bot = SafeBot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )

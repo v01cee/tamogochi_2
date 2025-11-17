@@ -6,8 +6,13 @@ import logging
 from pathlib import Path
 
 import redis
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.types import FSInputFile
 from django.contrib import admin, messages
 
+from core.config import settings
+from services.safe_bot import SafeBot
 from ..models import TouchContent
 
 
@@ -68,16 +73,11 @@ class TouchContentAdmin(admin.ModelAdmin):
         touch_content = queryset.first()
 
         try:
-            from aiogram import Bot
-            from aiogram.client.default import DefaultBotProperties
-            from aiogram.enums import ParseMode
-            from aiogram.types import FSInputFile
-            from core.config import settings
             from database.session import SessionLocal
             from models.user import User
 
             async def run_send():
-                bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                bot = SafeBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 bot_info = await bot.get_me()
                 bot_id = bot_info.id
 
@@ -139,7 +139,6 @@ class TouchContentAdmin(admin.ModelAdmin):
 
     # ------------------------------------------------------------------ utils
     async def _send_touch(self, bot, bot_id, telegram_id, touch_content, redis_client, logger):
-        from core.config import settings
         from services.evening_touch import _send_first_rating_question
 
         touch_type = touch_content.touch_type
@@ -156,8 +155,6 @@ class TouchContentAdmin(admin.ModelAdmin):
         await self._send_morning_touch(bot, telegram_id, touch_content, bot_id, redis_client, logger)
 
     async def _send_day_touch(self, bot, telegram_id, touch_content, logger):
-        from core.config import settings
-
         if touch_content.summary:
             summary_text = touch_content.summary.strip()
             logger.info(f"[ADMIN] Отправляем описание для day_touch: {summary_text[:100]}...")
@@ -189,7 +186,6 @@ class TouchContentAdmin(admin.ModelAdmin):
         logger.info("[ADMIN] Для day_touch вопросы не отправляются")
 
     async def _send_evening_touch(self, bot, telegram_id, touch_content, bot_id, logger):
-        from core.config import settings
         from services.evening_touch import _send_evening_content, _send_first_rating_question
 
         logger.info("[ADMIN] Касание типа 'evening' - отправляем видео или текст")
