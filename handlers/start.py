@@ -1,18 +1,22 @@
 import logging
 import re
-from datetime import time
+from datetime import date, time
 from io import BytesIO
 import requests
 
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from core.texts import get_booking_text
 from core.keyboards import KeyboardOperations
-from core.states import FeedbackStates, ProfileStates, NotificationSettingsStates, TouchQuestionStates
+from core.states import FeedbackStates, ProfileStates, NotificationSettingsStates, TouchQuestionStates, SaturdayReflectionStates
 from database.session import get_session
 from repositories.user_repository import UserRepository
+from repositories.touch_answer_repository import TouchAnswerRepository
+from repositories.touch_content_repository import TouchContentRepository
+from repositories.evening_reflection_repository import EveningReflectionRepository
 from qwen_client import generate_qwen_response
 from whisper_client import transcribe_audio
 
@@ -642,14 +646,108 @@ async def process_company(message: Message, state: FSMContext):
     await message.answer(review_text, reply_markup=review_keyboard)
 
 
+# Обработчики стратсубботы должны быть зарегистрированы ДО общего обработчика текстовых сообщений
+# чтобы они имели приоритет при обработке сообщений в состоянии стратсубботы
+@router.message(SaturdayReflectionStates.answering_segment_1)
+async def process_saturday_segment_1(message: Message, state: FSMContext):
+    """Обработчик ответа на сегмент 1/5 (Похвастаться)."""
+    logger.info(f"[SATURDAY] Обработчик segment_1 вызван для пользователя {message.from_user.id}")
+    logger.info(f"[SATURDAY] Тип сообщения: text={message.text is not None}, voice={message.voice is not None}")
+    
+    next_question = (
+        "2/5 Второй шаг — посмотреть на то, что не получилось 🔍\n"
+        "Где ты застрял? В чём было ключевое противоречие недели? Какие ограничения встретились, что забирало энергию?\n"
+        "Важно не просто пожаловаться, а конструктивно разобрать, где были сложности.\n\n"
+        "✍️ Напиши или наговори свои наблюдения — мы добавим их в твою карту личной стратегии"
+    )
+    await _process_saturday_reflection_answer(
+        message, state, 1,
+        SaturdayReflectionStates.answering_segment_2,
+        next_question
+    )
+
+
+@router.message(SaturdayReflectionStates.answering_segment_2)
+async def process_saturday_segment_2(message: Message, state: FSMContext):
+    """Обработчик ответа на сегмент 2/5 (Что не получилось)."""
+    next_question = (
+        "3/5 Третий шаг — поблагодарить 🙏\n"
+        "Вспомни, кто помог тебе на этой неделе. Чья поддержка была особенно ценной? Кому хочется сказать спасибо?\n"
+        "Для продвинутых: прямо сейчас можно взять телефон и отправить пару тёплых слов тем, о ком ты подумал. Благодарность — это практика, которая расширяет поле возможностей.\n\n"
+        "✍️ Напиши или наговори свой ответ — он тоже войдёт в твою стратегию"
+    )
+    await _process_saturday_reflection_answer(
+        message, state, 2,
+        SaturdayReflectionStates.answering_segment_3,
+        next_question
+    )
+
+
+@router.message(SaturdayReflectionStates.answering_segment_3)
+async def process_saturday_segment_3(message: Message, state: FSMContext):
+    """Обработчик ответа на сегмент 3/5 (Поблагодарить)."""
+    next_question = (
+        "4/5 Четвёртый шаг — помечтать ✨\n"
+        "Вернись к большим целям и намерениям, которые ставил(а) в начале. Подумай: что из опыта этой недели хочется добавить в них? Какие новые инсайты и наблюдения стоит приземлить в твою личную стратегию?\n\n"
+        "✍️ Поделись своими мыслями письменно или голосом"
+    )
+    await _process_saturday_reflection_answer(
+        message, state, 3,
+        SaturdayReflectionStates.answering_segment_4,
+        next_question
+    )
+
+
+@router.message(SaturdayReflectionStates.answering_segment_4)
+async def process_saturday_segment_4(message: Message, state: FSMContext):
+    """Обработчик ответа на сегмент 4/5 (Помечтать)."""
+    next_question = (
+        "5/5 И пятый шаг — пообещать 💪\n"
+        "Выбери один-два фокуса на следующую неделю. Это должны быть те самые «сдвиговые задачи», которые реально продвинут тебя к важным целям.\n\n"
+        "✍️ Напиши или наговори, что берёшь в фокус. Мы сохраним это в твоей карте стратегии как твой следующий шаг"
+    )
+    await _process_saturday_reflection_answer(
+        message, state, 4,
+        SaturdayReflectionStates.answering_segment_5,
+        next_question
+    )
+
+
+@router.message(SaturdayReflectionStates.answering_segment_5)
+async def process_saturday_segment_5(message: Message, state: FSMContext):
+    """Обработчик ответа на сегмент 5/5 (Пообещать)."""
+    await _process_saturday_reflection_answer(
+        message, state, 5,
+        None,  # Нет следующего состояния
+        ""  # Нет следующего вопроса
+    )
+
+
 @router.message(F.voice | F.text)
 async def process_touch_question_answer(message: Message, state: FSMContext):
     """Обработчик ответов на вопросы касания (проверяет Redis для определения состояния)"""
     logger.info(f"[TOUCH_QUESTION] Проверяем Redis для определения состояния")
     
+    # Сначала проверяем текущее состояние FSM
+    current_fsm_state = await state.get_state()
+    logger.info(f"[TOUCH_QUESTION] Текущее состояние FSM: {current_fsm_state}")
+    
+    if current_fsm_state:
+        # Проверяем, не находится ли пользователь в состоянии стратсубботы
+        if current_fsm_state.startswith("SaturdayReflectionStates:"):
+            logger.info(f"[TOUCH_QUESTION] Пользователь в состоянии стратсубботы ({current_fsm_state}), пропускаем обработку касаний - даем возможность другим обработчикам обработать")
+            # НЕ обрабатываем, чтобы дать возможность специфичным обработчикам состояний обработать сообщение
+            return
+        # Если состояние не TouchQuestionStates.waiting_for_answer, пропускаем
+        if current_fsm_state != "TouchQuestionStates:waiting_for_answer":
+            logger.info(f"[TOUCH_QUESTION] Состояние FSM не TouchQuestionStates.waiting_for_answer ({current_fsm_state}), пропускаем")
+            return
+    
     # Сначала проверяем, есть ли состояние в Redis
     try:
         import redis
+        # from core.config import settings
+        
         from core.config import settings
         
         redis_client = redis.Redis(
@@ -666,6 +764,24 @@ async def process_touch_question_answer(message: Message, state: FSMContext):
         redis_state = redis_client.get(state_key)
         
         logger.info(f"[TOUCH_QUESTION] Состояние в Redis: {redis_state}, ключ: {state_key}")
+        
+        # Проверяем, не находится ли пользователь в состоянии стратсубботы
+        saturday_states = [
+            "SaturdayReflectionStates:answering_segment_1",
+            "SaturdayReflectionStates:answering_segment_2",
+            "SaturdayReflectionStates:answering_segment_3",
+            "SaturdayReflectionStates:answering_segment_4",
+            "SaturdayReflectionStates:answering_segment_5",
+            "SaturdayReflectionStates:confirming_segment_1",
+            "SaturdayReflectionStates:confirming_segment_2",
+            "SaturdayReflectionStates:confirming_segment_3",
+            "SaturdayReflectionStates:confirming_segment_4",
+            "SaturdayReflectionStates:confirming_segment_5",
+        ]
+        
+        if redis_state in saturday_states:
+            logger.info(f"[TOUCH_QUESTION] Пользователь в состоянии стратсубботы ({redis_state}), пропускаем обработку касаний")
+            return
         
         # Если состояние не TouchQuestionStates.waiting_for_answer, пропускаем
         if redis_state != "TouchQuestionStates:waiting_for_answer":
@@ -694,6 +810,8 @@ async def _process_touch_question_answer_internal(message: Message, state: FSMCo
     try:
         import redis
         import json
+        # from core.config import settings
+        
         from core.config import settings
         
         redis_client = redis.Redis(
@@ -760,10 +878,8 @@ async def _process_touch_question_answer_internal(message: Message, state: FSMCo
         }
         keyboard = await keyboard_ops.create_keyboard(buttons=keyboard_buttons, interval=2)
         
-        await message.answer(
-            "Отлично, хочешь ли ты еще раз перезаписать сообщение или фиксируем его для создания твоей личной карты стратегии?",
-            reply_markup=keyboard
-        )
+        confirm_text = get_booking_text("touch_voice_confirm_prompt")
+        await message.answer(confirm_text, reply_markup=keyboard)
         await state.set_state(TouchQuestionStates.waiting_for_voice_confirmation)
         return
     
@@ -844,7 +960,28 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
             # Пользователь отправил ответ на рефлексию, а вопросов нет
             logger.info(f"[TOUCH_QUESTION] Ответ на рефлексию без вопросов получен: {answer_text[:200]}...")
             
-            # Сохраняем ответ на рефлексию (можно добавить сохранение в БД)
+            # Сохраняем ответ на рефлексию в БД
+            try:
+                session = next(get_session())
+                try:
+                    user_repo = UserRepository(session)
+                    user = user_repo.get_by_telegram_id(message.from_user.id)
+                    
+                    if user:
+                        reflection_repo = EveningReflectionRepository(session)
+                        reflection_date = date.today()
+                        
+                        reflection_repo.create_or_update(
+                            user_id=user.id,
+                            reflection_date=reflection_date,
+                            reflection_text=answer_text,
+                        )
+                        logger.info(f"[EVENING_REFLECTION] Сохранена вечерняя рефлексия для пользователя {user.id}")
+                finally:
+                    session.close()
+            except Exception as e:
+                logger.error(f"[EVENING_REFLECTION] Ошибка при сохранении вечерней рефлексии в БД: {e}", exc_info=True)
+            
             # Отправляем благодарность и главное меню
             await message.answer("Спасибо! Твоя рефлексия сохранена. Это поможет сформировать твою мини-стратегию.")
             
@@ -984,6 +1121,8 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
     try:
         import redis
         import json
+        # from core.config import settings
+        
         from core.config import settings
         
         redis_client = redis.Redis(
@@ -1101,7 +1240,45 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
         if telegram_id == bot_id and telegram_id_from_data and telegram_id_from_data != bot_id:
             telegram_id = telegram_id_from_data
         
-        await message.answer("Твои ответы зафиксированы.")
+        # Сохраняем ответы в БД перед очисткой состояния
+        touch_content_id = data.get("touch_content_id")
+        if touch_content_id and answers:
+            try:
+                session = next(get_session())
+                try:
+                    user_repo = UserRepository(session)
+                    user = user_repo.get_by_telegram_id(telegram_id)
+                    
+                    if user:
+                        # Проверяем, что touch_content существует
+                        touch_content_repo = TouchContentRepository(session)
+                        touch_content = touch_content_repo.get_by_id(touch_content_id)
+                        
+                        if touch_content:
+                            answer_repo = TouchAnswerRepository(session)
+                            touch_date = date.today()
+                            
+                            # Сохраняем все ответы
+                            answer_repo.create_answers(
+                                user_id=user.id,
+                                touch_content_id=touch_content_id,
+                                touch_date=touch_date,
+                                answers=answers,
+                            )
+                            logger.info(
+                                f"[TOUCH_ANSWER] Сохранены ответы для пользователя {user.id}, "
+                                f"touch_content_id={touch_content_id}, touch_type={touch_content.touch_type}, "
+                                f"количество ответов={len(answers)}"
+                            )
+                        else:
+                            logger.warning(f"[TOUCH_ANSWER] TouchContent с id={touch_content_id} не найден")
+                finally:
+                    session.close()
+            except Exception as e:
+                logger.error(f"[TOUCH_ANSWER] Ошибка при сохранении ответов в БД: {e}", exc_info=True)
+        
+        saved_text = get_booking_text("touch_answers_saved")
+        await message.answer(saved_text)
         
         # Отправляем сообщение с кнопками
         from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -1120,10 +1297,8 @@ async def _process_answer_with_validation(message: Message, state: FSMContext, a
         keyboard_builder.adjust(1, 1)
         keyboard = keyboard_builder.as_markup()
         
-        await message.answer(
-            "Посмотри, что пишут другие участники в чате, и поделись своим. Это часть общей лаборатории стратегий.",
-            reply_markup=keyboard
-        )
+        chat_invitation_text = get_booking_text("touch_chat_invitation")
+        await message.answer(chat_invitation_text, reply_markup=keyboard)
         
         # Очищаем состояние и данные из Redis после завершения всех вопросов
         await state.clear()
@@ -1166,6 +1341,8 @@ async def handle_voice_message(message: Message, state: FSMContext):
     try:
         import redis
         import json
+        # from core.config import settings
+        
         from core.config import settings
         
         redis_client = redis.Redis(
@@ -1460,4 +1637,109 @@ async def handle_voice_message(message: Message, state: FSMContext):
             except:
                 pass
         await message.answer("Произошла ошибка при обработке голосового сообщения. Попробуйте отправить текстовое сообщение или повторите попытку позже.")
+
+
+async def _process_saturday_reflection_answer(
+    message: Message,
+    state: FSMContext,
+    current_segment: int,
+    next_state: SaturdayReflectionStates | None,
+    next_question: str
+) -> None:
+    """Обработать ответ на сегмент рефлексии стратсубботы."""
+    logger.info(f"[SATURDAY] _process_saturday_reflection_answer вызван для сегмента {current_segment}")
+    processing_msg = None
+    
+    try:
+        # Извлекаем текст (голосовое или текстовое)
+        if message.voice:
+            logger.info("[SATURDAY] Получено голосовое сообщение, начинаем транскрипцию...")
+            processing_msg = await message.answer("🔄 Обрабатываю голосовое сообщение...")
+            
+            file = await message.bot.get_file(message.voice.file_id)
+            audio_data = BytesIO()
+            await message.bot.download_file(file.file_path, destination=audio_data)
+            raw_text = await transcribe_audio(audio_data)
+            
+            if processing_msg:
+                try:
+                    await processing_msg.delete()
+                except:
+                    pass
+        elif message.text:
+            raw_text = message.text.strip()
+        else:
+            await message.answer("Пожалуйста, отправьте текстовое или голосовое сообщение.")
+            return
+        
+        if not raw_text or not raw_text.strip():
+            await message.answer("Пожалуйста, отправьте текстовое или голосовое сообщение.")
+            return
+        
+        # Отправляем в Qwen для обработки
+        processing_msg = await message.answer("🔄 Обрабатываю ваш ответ...")
+        
+        qwen_prompt = (
+            f"Исходный текст пользователя:\n{raw_text}\n\n"
+            "Исправь орфографию и пунктуацию, скомпонуй текст так, чтобы он был читаемым и структурированным. "
+            "ВАЖНО: НЕ добавляй ничего от себя, НЕ интерпретируй, НЕ додумывай. "
+            "Верни ТОЛЬКО исправленный и скомпонованный текст того, что сказал пользователь. "
+            "Сохрани смысл и содержание, но улучши форму."
+        )
+        
+        processed_text = await generate_qwen_response(qwen_prompt)
+        
+        if processing_msg:
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+        
+        if not processed_text or not processed_text.strip():
+            processed_text = raw_text  # Используем исходный текст, если Qwen не ответил
+        
+        # Сохраняем обработанный текст во временное хранилище для подтверждения
+        await state.update_data(
+            temp_processed_text=processed_text.strip(),
+            temp_current_segment=current_segment,
+            temp_next_question=next_question
+        )
+        
+        # Показываем обработанный текст для подтверждения
+        confirmation_text = f"📝 Вот как мы обработали ваш ответ:\n\n{processed_text.strip()}\n\nВсё верно?"
+        
+        # Создаем клавиатуру с кнопками подтверждения
+        keyboard_builder = InlineKeyboardBuilder()
+        keyboard_builder.button(text="✅ Все верно", callback_data=f"saturday_confirm_{current_segment}")
+        keyboard_builder.button(text="✏️ Изменить", callback_data=f"saturday_edit_{current_segment}")
+        keyboard_builder.adjust(2)
+        keyboard = keyboard_builder.as_markup()
+        
+        # Определяем состояние подтверждения
+        confirmation_states = {
+            1: SaturdayReflectionStates.confirming_segment_1,
+            2: SaturdayReflectionStates.confirming_segment_2,
+            3: SaturdayReflectionStates.confirming_segment_3,
+            4: SaturdayReflectionStates.confirming_segment_4,
+            5: SaturdayReflectionStates.confirming_segment_5,
+        }
+        
+        await message.answer(confirmation_text, reply_markup=keyboard)
+        await state.set_state(confirmation_states[current_segment])
+            
+    except TimeoutError:
+        if processing_msg:
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+        await message.answer("Сервер обрабатывает сообщение слишком долго. Попробуйте отправить более короткое сообщение или повторите попытку позже.")
+    except Exception as e:
+        logger.error(f"[SATURDAY] Ошибка при обработке ответа: {e}", exc_info=True)
+        if processing_msg:
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+        await message.answer("Произошла ошибка при обработке ответа. Попробуйте отправить сообщение заново.")
 

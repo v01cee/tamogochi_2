@@ -16,7 +16,7 @@ from sqlalchemy import Select, func, or_, select, update
 import redis
 import json
 
-from core.config import settings
+# from core.config import settings
 from core.texts import TEXTS
 from database.session import SessionLocal
 from models.touch_content import TouchContent
@@ -70,7 +70,7 @@ def _mark_users_sent(user_ids: List[int], sent_at: datetime) -> None:
 
 async def send_evening_touch(bot: Bot) -> None:
     """Отправить вечернее сообщение всем активным подписчикам."""
-    tz = ZoneInfo(settings.timezone)
+    tz = ZoneInfo("Europe/Moscow")
     now = datetime.now(tz=tz)
     target_date = now.date()
     
@@ -153,7 +153,7 @@ async def _send_evening_content(bot: Bot, telegram_id: int, content: TouchConten
     # Если есть видео - отправляем видео с caption
     video_file_path = getattr(content, 'video_file_path', None)
     if video_file_path:
-        file_path = Path(settings.media_root) / video_file_path
+        file_path = Path("media") / video_file_path
         if file_path.exists():
             await bot.send_video(
                 telegram_id,
@@ -184,8 +184,8 @@ async def _send_evening_content(bot: Bot, telegram_id: int, content: TouchConten
 
 def _build_evening_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    if settings.community_chat_url:
-        builder.button(text="Перейти в чат", url=settings.community_chat_url)
+    # if settings.community_chat_url:
+    #     builder.button(text="Перейти в чат", url=settings.community_chat_url)
     builder.button(text="В меню «Стратегия дня»", callback_data="day_strategy")
     builder.button(text="В главное меню", callback_data="back_to_menu")
     builder.adjust(1, 1, 1)
@@ -211,6 +211,8 @@ async def _send_first_rating_question(bot: Bot, telegram_id: int, bot_id: int = 
     await bot.send_message(telegram_id, question_text, reply_markup=keyboard)
     
     # Сохраняем состояние в Redis
+    from core.config import settings
+    
     redis_client = redis.Redis(
         host=settings.redis_host,
         port=settings.redis_port,

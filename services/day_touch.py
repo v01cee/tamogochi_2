@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import Select, func, or_, select, update
 
-from core.config import settings
+# from core.config import settings
 from core.texts import TEXTS
 from database.session import SessionLocal
 from models.touch_content import TouchContent
@@ -64,7 +64,7 @@ def _mark_users_sent(user_ids: List[int], sent_at: datetime) -> None:
 
 async def send_day_touch(bot: Bot) -> None:
     """Отправить дневное сообщение всем активным подписчикам."""
-    tz = ZoneInfo(settings.timezone)
+    tz = ZoneInfo("Europe/Moscow")
     now = datetime.now(tz=tz)
     target_date = now.date()
 
@@ -145,8 +145,8 @@ async def send_day_touch(bot: Bot) -> None:
 
 def _build_day_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    if settings.community_chat_url:
-        builder.button(text="Перейти в чат", url=settings.community_chat_url)
+    # if settings.community_chat_url:
+    #     builder.button(text="Перейти в чат", url=settings.community_chat_url)
     builder.button(text="В меню «Стратегия дня»", callback_data="day_strategy")
     builder.adjust(1, 1)
     return builder.as_markup()

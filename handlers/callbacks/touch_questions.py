@@ -136,10 +136,7 @@ async def callback_touch_questions_continue(callback: CallbackQuery, state: FSMC
     await callback.answer()
     
     # Отправляем финальное сообщение
-    final_message = (
-        "Спасибо 🙌 Желаю прожить этот день с максимальным фокусом и осознанностью, "
-        "энергией и счастьем. Сделай себе кайфовый день! До встречи днём."
-    )
+    final_message = get_booking_text("touch_morning_final")
     
     # Кнопка "Главное меню"
     menu_buttons = {
@@ -154,13 +151,13 @@ async def callback_touch_questions_continue(callback: CallbackQuery, state: FSMC
     
     try:
         import redis
-        from core.config import settings
+        # from core.config import settings
         
         redis_client = redis.Redis(
             host=settings.redis_host,
-            port=settings.redis_port,
-            password=settings.redis_password,
-            db=settings.redis_db,
+            port=6700,
+            password="An0th3rStr0ngR3disP@ss",
+            db=0,
             decode_responses=True
         )
         

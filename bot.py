@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Основная функция запуска бота"""
+    if not settings.bot_token:
+        raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+    
     # Используем LimitedBot для автоматического контроля лимитов Telegram API
     bot = limited_aiogram.LimitedBot(
         token=settings.bot_token,

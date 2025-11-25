@@ -10,6 +10,10 @@ from database.base import Base
 if TYPE_CHECKING:
     from models.payment import Payment
     from models.quiz_result import QuizResult
+    from models.saturday_reflection import SaturdayReflection
+    from models.touch_answer import TouchAnswer
+    from models.evening_reflection import EveningReflection
+    from models.evening_rating import EveningRating
 
 
 class User(Base):
@@ -130,6 +134,26 @@ class User(Base):
     )
     payments: Mapped[List["Payment"]] = relationship(
         "Payment",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    saturday_reflections: Mapped[List["SaturdayReflection"]] = relationship(
+        "SaturdayReflection",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    touch_answers: Mapped[List["TouchAnswer"]] = relationship(
+        "TouchAnswer",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    evening_reflections: Mapped[List["EveningReflection"]] = relationship(
+        "EveningReflection",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    evening_ratings: Mapped[List["EveningRating"]] = relationship(
+        "EveningRating",
         back_populates="user",
         cascade="all, delete-orphan",
     )

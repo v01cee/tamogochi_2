@@ -11,8 +11,6 @@ import time
 import warnings
 from io import BytesIO
 import requests
-from core.config import settings
-
 # Подавляем предупреждение pydub о ffmpeg при импорте (проверим позже в optimize_audio)
 warnings.filterwarnings("ignore", message=".*ffmpeg.*", category=RuntimeWarning)
 
@@ -143,7 +141,9 @@ except Exception as e:
     PYDUB_AVAILABLE = False
     _PYDUB_ERROR = f"Ошибка импорта pydub: {e}"
 
-# Получаем конфигурацию из settings
+from core.config import settings
+
+# Используем переменные окружения для Cloud.ru API (Whisper)
 CLOUDRU_IAM_KEY = settings.cloudru_iam_key
 CLOUDRU_IAM_SECRET = settings.cloudru_iam_secret
 MODEL_URL = settings.whisper_model_url

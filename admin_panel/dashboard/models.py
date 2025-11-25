@@ -132,3 +132,150 @@ class TouchContent(models.Model):
         return f"{day} | {self.get_touch_type_display()} | {self.title}"
 
 
+class TouchAnswer(models.Model):
+    """Ответы пользователей на вопросы касаний."""
+
+    user = models.ForeignKey(
+        TelegramUser,
+        related_name="touch_answers",
+        on_delete=models.DO_NOTHING,
+        db_column="user_id",
+        verbose_name="Пользователь",
+    )
+    touch_content = models.ForeignKey(
+        TouchContent,
+        related_name="answers",
+        on_delete=models.DO_NOTHING,
+        db_column="touch_content_id",
+        verbose_name="Контент касания",
+    )
+    touch_date = models.DateField("Дата касания", db_index=True)
+    question_index = models.IntegerField("Индекс вопроса")
+    answer_text = models.TextField("Текст ответа")
+    created_at = models.DateTimeField("Создан")
+    updated_at = models.DateTimeField("Обновлён")
+    is_active = models.BooleanField("Активен", default=True)
+
+    class Meta:
+        managed = False
+        db_table = "touch_answers"
+        verbose_name = "Ответ на вопрос касания"
+        verbose_name_plural = "Ответы на вопросы касаний"
+        ordering = ("-touch_date", "question_index")
+        indexes = [
+            models.Index(fields=["user_id", "touch_content_id", "touch_date"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.touch_content.get_touch_type_display()} - Вопрос {self.question_index + 1} ({self.touch_date})"
+
+
+class EveningReflection(models.Model):
+    """Вечерняя рефлексия пользователя."""
+
+    user = models.ForeignKey(
+        TelegramUser,
+        related_name="evening_reflections",
+        on_delete=models.DO_NOTHING,
+        db_column="user_id",
+        verbose_name="Пользователь",
+    )
+    reflection_date = models.DateField("Дата рефлексии", db_index=True)
+    reflection_text = models.TextField("Текст рефлексии")
+    created_at = models.DateTimeField("Создан")
+    updated_at = models.DateTimeField("Обновлён")
+    is_active = models.BooleanField("Активен", default=True)
+
+    class Meta:
+        managed = False
+        db_table = "evening_reflections"
+        verbose_name = "Вечерняя рефлексия"
+        verbose_name_plural = "Вечерние рефлексии"
+        ordering = ("-reflection_date", "-created_at")
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.reflection_date}"
+
+
+class EveningRating(models.Model):
+    """Вечерние оценки пользователя."""
+
+    user = models.ForeignKey(
+        TelegramUser,
+        related_name="evening_ratings",
+        on_delete=models.DO_NOTHING,
+        db_column="user_id",
+        verbose_name="Пользователь",
+    )
+    rating_date = models.DateField("Дата оценки", db_index=True)
+    rating_energy = models.PositiveSmallIntegerField("Энергия (1-10)")
+    rating_happiness = models.PositiveSmallIntegerField("Счастье (1-10)")
+    rating_progress = models.PositiveSmallIntegerField("Прогресс (1-10)")
+    created_at = models.DateTimeField("Создан")
+    updated_at = models.DateTimeField("Обновлён")
+    is_active = models.BooleanField("Активен", default=True)
+
+    class Meta:
+        managed = False
+        db_table = "evening_ratings"
+        verbose_name = "Вечерняя оценка"
+        verbose_name_plural = "Вечерние оценки"
+        ordering = ("-rating_date", "-created_at")
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.rating_date} (Э:{self.rating_energy} Сч:{self.rating_happiness} Пр:{self.rating_progress})"
+
+
+class SaturdayReflection(models.Model):
+    """Рефлексия стратсубботы."""
+
+    user = models.ForeignKey(
+        TelegramUser,
+        related_name="saturday_reflections",
+        on_delete=models.DO_NOTHING,
+        db_column="user_id",
+        verbose_name="Пользователь",
+    )
+    reflection_date = models.DateField("Дата рефлексии", db_index=True)
+    segment_1 = models.TextField("1/5 Похвастаться", blank=True, null=True)
+    segment_2 = models.TextField("2/5 Что не получилось", blank=True, null=True)
+    segment_3 = models.TextField("3/5 Поблагодарить", blank=True, null=True)
+    segment_4 = models.TextField("4/5 Помечтать", blank=True, null=True)
+    segment_5 = models.TextField("5/5 Пообещать", blank=True, null=True)
+    created_at = models.DateTimeField("Создан")
+    updated_at = models.DateTimeField("Обновлён")
+    is_active = models.BooleanField("Активен", default=True)
+
+    class Meta:
+        managed = False
+        db_table = "saturday_reflections"
+        verbose_name = "Рефлексия стратсубботы"
+        verbose_name_plural = "Рефлексии стратсубботы"
+        ordering = ("-reflection_date", "-created_at")
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.reflection_date}"
+
+    def segments_completed(self):
+        """Количество заполненных сегментов."""
+        return sum([
+            1 if self.segment_1 else 0,
+            1 if self.segment_2 else 0,
+            1 if self.segment_3 else 0,
+            1 if self.segment_4 else 0,
+            1 if self.segment_5 else 0,
+        ])
+
+    segments_completed.short_description = "Заполнено сегментов"
+
+
+class UnifiedStatistics(models.Model):
+    """Прокси-модель для единой страницы статистики."""
+    
+    class Meta:
+        managed = False
+        verbose_name = "Статистика"
+        verbose_name_plural = "Статистика"
+        default_permissions = ()
+
+

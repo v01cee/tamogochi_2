@@ -48,3 +48,17 @@ class EveningRatingStates(StatesGroup):
     rating_progress = State()  # Оценка продвижения к результату/целям (3/5)
     rating_question_4 = State()  # Вопрос 4/5
     rating_question_5 = State()  # Вопрос 5/5
+
+
+class SaturdayReflectionStates(StatesGroup):
+    """Состояния для рефлексии стратсубботы"""
+    answering_segment_1 = State()  # 1/5 Похвастаться
+    answering_segment_2 = State()  # 2/5 Что не получилось
+    answering_segment_3 = State()  # 3/5 Поблагодарить
+    answering_segment_4 = State()  # 4/5 Помечтать
+    answering_segment_5 = State()  # 5/5 Пообещать
+    confirming_segment_1 = State()  # Подтверждение сегмента 1
+    confirming_segment_2 = State()  # Подтверждение сегмента 2
+    confirming_segment_3 = State()  # Подтверждение сегмента 3
+    confirming_segment_4 = State()  # Подтверждение сегмента 4
+    confirming_segment_5 = State()  # Подтверждение сегмента 5

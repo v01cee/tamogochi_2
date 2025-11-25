@@ -94,8 +94,9 @@ async def callback_confirm_profile_data(callback: CallbackQuery, state: FSMConte
 
 @router.callback_query(F.data == "consent_disagree")
 async def callback_consent_disagree(callback: CallbackQuery, state: FSMContext):
-    """Отказ от согласия и возврат в меню."""
-    await _send_main_menu(callback, state)
+    """Отказ от согласия на обработку персональных данных."""
+    disagree_text = get_booking_text("consent_disagree_message")
+    await callback.message.answer(disagree_text)
     await callback.answer()
 
 

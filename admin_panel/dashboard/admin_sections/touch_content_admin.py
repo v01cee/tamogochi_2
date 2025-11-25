@@ -11,7 +11,16 @@ from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile
 from django.contrib import admin, messages
 
-from core.config import settings
+import os
+import sys
+from pathlib import Path
+
+# Добавляем корневую директорию проекта в sys.path для импорта core.config
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from core.config import settings as core_settings
 from ..models import TouchContent
 
 
@@ -77,7 +86,9 @@ class TouchContentAdmin(admin.ModelAdmin):
 
             async def run_send():
                 import limited_aiogram
-                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                if not core_settings.bot_token:
+                    raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+                bot = limited_aiogram.LimitedBot(token=core_settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 bot_info = await bot.get_me()
                 bot_id = bot_info.id
 
@@ -85,10 +96,10 @@ class TouchContentAdmin(admin.ModelAdmin):
                 logger.info(f"[ADMIN] Bot ID: {bot_id}")
 
                 redis_client = redis.Redis(
-                    host=settings.redis_host,
-                    port=settings.redis_port,
-                    password=settings.redis_password,
-                    db=settings.redis_db,
+                    host=core_settings.redis_host,
+                    port=core_settings.redis_port,
+                    password=core_settings.redis_password,
+                    db=core_settings.redis_db,
                     decode_responses=True,
                 )
                 try:

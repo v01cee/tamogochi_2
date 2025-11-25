@@ -13,6 +13,7 @@ from core.config import settings
 from services.morning_touch import send_morning_touch
 from services.day_touch import send_day_touch
 from services.evening_touch import send_evening_touch
+from services.saturday_touch import send_saturday_touch
 from services.qwen_warmup import warmup_whisper_model, keep_whisper_warm
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,16 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Стратсуббота: отправка сообщения о рефлексии в субботу в 12:00 МСК
+    scheduler.add_job(
+        send_saturday_touch,
+        trigger=CronTrigger(day_of_week="sat", hour=12, minute=0),
+        kwargs={"bot": bot},
+        name="saturday_touch",
+        id="saturday_touch",
+        replace_existing=True,
+    )
+
     # Прогрев модели Whisper при старте (одноразовая задача через 20 секунд)
     tz = ZoneInfo(settings.timezone)
     whisper_warmup_time = datetime.now(tz=tz) + timedelta(seconds=20)
@@ -71,6 +82,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
 
     scheduler.start()
     logger.info("Планировщик задач запущен (часовой пояс %s)", settings.timezone)
+    logger.info("📅 Стратсуббота: отправка сообщения о рефлексии каждую субботу в 12:00 МСК")
     logger.info("🎤 Запланирован прогрев модели Whisper через 20 секунд после старта")
     logger.info("🎤 Keep-alive для модели Whisper каждые 15 минут")
     

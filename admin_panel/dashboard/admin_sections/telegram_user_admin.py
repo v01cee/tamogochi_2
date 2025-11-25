@@ -9,8 +9,24 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from django.contrib import admin, messages
 
-from core.config import settings
-from ..models import QuizResult, TelegramUser
+import os
+import sys
+from pathlib import Path
+
+# Добавляем корневую директорию проекта в sys.path для импорта core.config
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from core.config import settings as core_settings
+from ..models import (
+    QuizResult,
+    TelegramUser,
+    TouchAnswer,
+    EveningReflection,
+    EveningRating,
+    SaturdayReflection,
+)
 
 
 class QuizResultInline(admin.TabularInline):
@@ -30,6 +46,70 @@ class QuizResultInline(admin.TabularInline):
     )
     ordering = ("-created_at",)
     show_change_link = True
+
+
+class TouchAnswerInline(admin.TabularInline):
+    model = TouchAnswer
+    extra = 0
+    can_delete = False
+    max_num = 0
+    readonly_fields = (
+        "touch_content",
+        "touch_date",
+        "question_index",
+        "answer_text",
+        "created_at",
+    )
+    ordering = ("-touch_date", "question_index")
+    show_change_link = True
+    fk_name = "user"
+
+
+class EveningReflectionInline(admin.TabularInline):
+    model = EveningReflection
+    extra = 0
+    can_delete = False
+    max_num = 0
+    readonly_fields = (
+        "reflection_date",
+        "reflection_text",
+        "created_at",
+    )
+    ordering = ("-reflection_date",)
+    show_change_link = True
+    fk_name = "user"
+
+
+class EveningRatingInline(admin.TabularInline):
+    model = EveningRating
+    extra = 0
+    can_delete = False
+    max_num = 0
+    readonly_fields = (
+        "rating_date",
+        "rating_energy",
+        "rating_happiness",
+        "rating_progress",
+        "created_at",
+    )
+    ordering = ("-rating_date",)
+    show_change_link = True
+    fk_name = "user"
+
+
+class SaturdayReflectionInline(admin.TabularInline):
+    model = SaturdayReflection
+    extra = 0
+    can_delete = False
+    max_num = 0
+    readonly_fields = (
+        "reflection_date",
+        "segments_completed",
+        "created_at",
+    )
+    ordering = ("-reflection_date",)
+    show_change_link = True
+    fk_name = "user"
 
 
 @admin.register(TelegramUser)
@@ -64,7 +144,7 @@ class TelegramUserAdmin(admin.ModelAdmin):
         "notification_intro_seen",
     )
     ordering = ("-created_at",)
-    actions = ["delete_selected", "send_morning_touch_test", "send_day_touch_test", "send_evening_touch_test"]
+    actions = ["delete_selected", "send_morning_touch_test", "send_day_touch_test", "send_evening_touch_test", "send_saturday_touch_test"]
     readonly_fields = (
         "telegram_id",
         "username",
@@ -138,7 +218,13 @@ class TelegramUserAdmin(admin.ModelAdmin):
             },
         ),
     )
-    inlines = (QuizResultInline,)
+    inlines = (
+        QuizResultInline,
+        TouchAnswerInline,
+        EveningReflectionInline,
+        EveningRatingInline,
+        SaturdayReflectionInline,
+    )
 
     # --------------------------------------------------------------------- utils
     def latest_quiz_result(self, obj):
@@ -191,9 +277,11 @@ class TelegramUserAdmin(admin.ModelAdmin):
 
             async def run_touch():
                 import limited_aiogram
-                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                if not core_settings.bot_token:
+                    raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+                bot = limited_aiogram.LimitedBot(token=core_settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
-                    tz = ZoneInfo(settings.timezone)
+                    tz = ZoneInfo("Europe/Moscow")
                     now = datetime.now(tz=tz)
                     target_date = now.date()
                     users = await asyncio.to_thread(self._fetch_users, queryset)
@@ -242,9 +330,11 @@ class TelegramUserAdmin(admin.ModelAdmin):
 
             async def run_touch():
                 import limited_aiogram
-                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                if not core_settings.bot_token:
+                    raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+                bot = limited_aiogram.LimitedBot(token=core_settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
-                    tz = ZoneInfo(settings.timezone)
+                    tz = ZoneInfo("Europe/Moscow")
                     now = datetime.now(tz=tz)
                     target_date = now.date()
                     users = await asyncio.to_thread(self._fetch_users, queryset)
@@ -290,12 +380,14 @@ class TelegramUserAdmin(admin.ModelAdmin):
 
             async def run_touch():
                 import limited_aiogram
-                bot = limited_aiogram.LimitedBot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                if not core_settings.bot_token:
+                    raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+                bot = limited_aiogram.LimitedBot(token=core_settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
                 try:
                     bot_info = await bot.get_me()
                     bot_id = bot_info.id
 
-                    tz = ZoneInfo(settings.timezone)
+                    tz = ZoneInfo("Europe/Moscow")
                     now = datetime.now(tz=tz)
                     target_date = now.date()
                     users = await asyncio.to_thread(self._fetch_users, queryset)
@@ -333,4 +425,59 @@ class TelegramUserAdmin(admin.ModelAdmin):
             )
 
     send_evening_touch_test.short_description = "📤 Отправить вечернее касание (тест)"
+
+    def send_saturday_touch_test(self, request, queryset):
+        """Отправить сообщение о стратсубботе выбранным пользователям (для теста, без проверки дня недели)"""
+        try:
+            from core.texts import get_booking_text
+            from aiogram.utils.keyboard import InlineKeyboardBuilder
+            from aiogram.client.default import DefaultBotProperties
+            from aiogram.enums import ParseMode
+
+            async def run_touch():
+                import limited_aiogram
+                if not core_settings.bot_token:
+                    raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+                bot = limited_aiogram.LimitedBot(token=core_settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+                try:
+                    # Получаем пользователей из queryset или всех активных
+                    users = await asyncio.to_thread(self._fetch_users, queryset)
+                    
+                    if not users:
+                        return 0
+
+                    # Получаем текст сообщения
+                    message_text = get_booking_text("saturday_reflection")
+                    
+                    # Создаем клавиатуру с кнопкой "Начать"
+                    keyboard_builder = InlineKeyboardBuilder()
+                    keyboard_builder.button(text="Начать", callback_data="saturday_reflection_start")
+                    keyboard_builder.adjust(1)
+                    keyboard = keyboard_builder.as_markup()
+
+                    sent_count = 0
+                    for user_id, telegram_id in users:
+                        try:
+                            await bot.send_message(telegram_id, message_text, reply_markup=keyboard)
+                            sent_count += 1
+                        except Exception as exc:  # pylint: disable=broad-except
+                            logger = logging.getLogger(__name__)
+                            logger.warning("Не удалось отправить сообщение о стратсубботе пользователю %s: %s", telegram_id, exc)
+
+                    return sent_count
+                finally:
+                    await bot.session.close()
+
+            sent_count = asyncio.run(run_touch())
+            self.message_user(request, f"Сообщение о стратсубботе отправлено {sent_count} пользователям", messages.SUCCESS)
+        except Exception as exc:  # pylint: disable=broad-except
+            import traceback
+
+            self.message_user(
+                request,
+                f"Ошибка при отправке сообщения о стратсубботе: {str(exc)}\n{traceback.format_exc()}",
+                messages.ERROR,
+            )
+
+    send_saturday_touch_test.short_description = "📤 Отправить стратсубботу (тест)"
 

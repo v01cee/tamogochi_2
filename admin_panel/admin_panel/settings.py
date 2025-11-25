@@ -8,14 +8,14 @@ from typing import Any
 
 from sqlalchemy.engine.url import make_url
 
-from core.config import settings as core_settings
+# from core.config import settings as core_settings
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = core_settings.secret_key
+SECRET_KEY = "django-insecure-temporary-key-for-debugging-only"  # Временный ключ для отладки
 
-DEBUG = core_settings.debug
+DEBUG = True  # Включаем DEBUG для просмотра деталей ошибок
 
 ALLOWED_HOSTS: list[str] = ["*"]
 
@@ -63,19 +63,47 @@ TEMPLATES = [
 WSGI_APPLICATION = "admin_panel.wsgi.application"
 
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": core_settings.postgres_db,
-        "USER": core_settings.postgres_user,
-        "PASSWORD": core_settings.postgres_password,
-        "HOST": core_settings.postgres_host,
-        "PORT": core_settings.postgres_port,
-        "OPTIONS": {
-            "options": "-c statement_timeout=30000",
+# Импортируем настройки из core.config
+import os
+import sys
+from pathlib import Path
+
+# Добавляем корневую директорию проекта в sys.path
+project_root = Path(__file__).resolve().parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from core.config import settings as core_settings
+    
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": core_settings.postgres_db or os.getenv("POSTGRES_DB", "testing_postgres"),
+            "USER": core_settings.postgres_user or os.getenv("POSTGRES_USER", "admin"),
+            "PASSWORD": core_settings.postgres_password or os.getenv("POSTGRES_PASSWORD", ""),
+            "HOST": core_settings.postgres_host or os.getenv("POSTGRES_HOST", "localhost"),
+            "PORT": core_settings.postgres_port or int(os.getenv("POSTGRES_PORT", "5432")),
+            "OPTIONS": {
+                "options": "-c statement_timeout=30000",
+            },
         },
-    },
-}
+    }
+except ImportError:
+    # Fallback на переменные окружения напрямую, если core.config недоступен
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "testing_postgres"),
+            "USER": os.getenv("POSTGRES_USER", "admin"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
+            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
+            "PORT": int(os.getenv("POSTGRES_PORT", "5432")),
+            "OPTIONS": {
+                "options": "-c statement_timeout=30000",
+            },
+        },
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -201,12 +229,18 @@ JAZZMIN_UI_TWEAKS = {
 }
 
 
-DEFAULT_FILE_STORAGE = "admin_panel.dashboard.storage.MediaStorage"
-STATICFILES_STORAGE = "admin_panel.dashboard.storage.StaticStorage"
+AWS_S3_ENDPOINT_URL = ""  # core_settings.aws_s3_endpoint_url
+AWS_STORAGE_BUCKET_NAME = ""  # core_settings.aws_storage_bucket_name
+AWS_ACCESS_KEY_ID = ""  # core_settings.aws_access_key_id
+AWS_SECRET_ACCESS_KEY = ""  # core_settings.aws_secret_access_key
+AWS_QUERYSTRING_AUTH = True  # core_settings.aws_querystring_auth
 
-AWS_S3_ENDPOINT_URL = core_settings.aws_s3_endpoint_url
-AWS_STORAGE_BUCKET_NAME = core_settings.aws_storage_bucket_name
-AWS_ACCESS_KEY_ID = core_settings.aws_access_key_id
-AWS_SECRET_ACCESS_KEY = core_settings.aws_secret_access_key
-AWS_QUERYSTRING_AUTH = core_settings.aws_querystring_auth
+# Используем S3 только если настроен bucket_name, иначе локальное хранилище
+if AWS_STORAGE_BUCKET_NAME:
+    DEFAULT_FILE_STORAGE = "admin_panel.dashboard.storage.MediaStorage"
+    STATICFILES_STORAGE = "admin_panel.dashboard.storage.StaticStorage"
+else:
+    # Локальное хранилище по умолчанию
+    DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+    STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
 

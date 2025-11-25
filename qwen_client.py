@@ -7,12 +7,13 @@ import time
 import logging
 from typing import List, Dict, Any, Optional
 import requests
-from core.config import settings
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
-# Получаем конфигурацию из settings
+from core.config import settings
+
+# Используем переменные окружения для Cloud.ru API (Qwen)
 CLOUDRU_IAM_KEY = settings.cloudru_iam_key
 CLOUDRU_IAM_SECRET = settings.cloudru_iam_secret
 CLOUD_PUBLIC_URL = settings.cloud_public_url

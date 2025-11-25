@@ -15,10 +15,18 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile
 
+from datetime import date
 from core.config import settings
 from core.keyboards import KeyboardOperations
-from core.states import NotificationSettingsStates
+from core.states import NotificationSettingsStates, SaturdayReflectionStates
 from core.texts import get_booking_text
+from qwen_client import generate_qwen_response
+from whisper_client import transcribe_audio
+from io import BytesIO
+from aiogram.types import CallbackQuery
+from database.session import get_session
+from repositories.saturday_reflection_repository import SaturdayReflectionRepository
+from repositories.user_repository import UserRepository
 from database.session import get_session
 from repositories.touch_content_repository import TouchContentRepository
 from repositories.user_repository import UserRepository
@@ -56,7 +64,8 @@ ABOUT_BUTTONS = {
 }
 
 COMPANY_BUTTONS = {
-    "👉 Переход в ТГ": "link_telegram",
+    "🌐 Сайт": ("url", "https://happinessinaction.ru/"),
+    "👉 Переход в ТГ": ("url", "https://t.me/guzenuk"),
     "👉 Переход в ВК": "link_vk",
     "Продолжить": "continue_after_company",
 }
@@ -425,12 +434,6 @@ async def callback_continue_after_notification(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "link_telegram")
-async def callback_link_telegram(callback: CallbackQuery):
-    """Заглушка для ссылки на Telegram."""
-    await callback.answer("Ссылка на Telegram канал будет добавлена позже")
-
-
 @router.callback_query(F.data == "link_vk")
 async def callback_link_vk(callback: CallbackQuery):
     """Заглушка для ссылки на VK."""
@@ -651,5 +654,171 @@ async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
         interval=2,
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "saturday_reflection_start")
+async def callback_saturday_reflection_start(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Начать' для стратсубботы - начало рефлексии по 5 сегментам."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[SATURDAY] Кнопка 'Начать' нажата пользователем {callback.from_user.id}")
+    
+    # Сразу отвечаем на callback, чтобы не истек таймаут
+    try:
+        await callback.answer()
+    except Exception as e:
+        logger.warning(f"[SATURDAY] Не удалось ответить на callback: {e}")
+        # Продолжаем выполнение даже если ответ не удался
+    
+    # Инициализируем данные для рефлексии
+    await state.update_data(
+        saturday_segment=1,
+        saturday_answers={}
+    )
+    
+    # Отправляем первый вопрос рефлексии (1/5)
+    first_question = (
+        "1/5 Первый шаг — похвастаться 🌟\n"
+        "Какие победы случились у тебя на этой неделе в главных направлениях? Что удалось сделать, какие открытия или находки тебя поразили, что получилось особенно классно?\n\n"
+        "✍️ Напиши или наговори свой ответ. Мы сохраним его в твою карту личной стратегии"
+    )
+    
+    try:
+        await callback.message.answer(first_question)
+        await state.set_state(SaturdayReflectionStates.answering_segment_1)
+        
+        # Проверяем, что состояние установлено
+        current_state = await state.get_state()
+        logger.info(f"[SATURDAY] Состояние установлено: {current_state}")
+    except Exception as e:
+        logger.error(f"[SATURDAY] Ошибка при отправке сообщения или установке состояния: {e}", exc_info=True)
+        # Пытаемся отправить сообщение об ошибке
+        try:
+            await callback.message.answer("Произошла ошибка. Попробуйте нажать кнопку 'Начать' еще раз.")
+        except:
+            pass
+
+
+async def _handle_saturday_confirmation(
+    callback: CallbackQuery,
+    state: FSMContext,
+    segment: int,
+    is_confirmed: bool
+) -> None:
+    """Обработать подтверждение или редактирование ответа на сегмент рефлексии."""
+    await callback.answer()
+    
+    # Удаляем сообщение с кнопками
+    try:
+        await callback.message.delete()
+    except:
+        pass
+    
+    data = await state.get_data()
+    processed_text = data.get("temp_processed_text", "")
+    next_question = data.get("temp_next_question", "")
+    
+    if is_confirmed:
+        # Сохраняем ответ
+        answers = data.get("saturday_answers", {})
+        answers[f"segment_{segment}"] = processed_text
+        await state.update_data(saturday_answers=answers)
+        
+        # Сохраняем в БД
+        try:
+            session = next(get_session())
+            try:
+                user_repo = UserRepository(session)
+                user = user_repo.get_by_telegram_id(callback.from_user.id)
+                
+                if user:
+                    reflection_repo = SaturdayReflectionRepository(session)
+                    reflection_date = date.today()
+                    
+                    # Сохраняем текущий сегмент
+                    kwargs = {f"segment_{segment}": processed_text}
+                    reflection_repo.create_or_update(
+                        user_id=user.id,
+                        reflection_date=reflection_date,
+                        **kwargs
+                    )
+                    logger.info(f"[SATURDAY] Сохранен сегмент {segment} для пользователя {user.id}")
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"[SATURDAY] Ошибка при сохранении в БД: {e}", exc_info=True)
+        
+        # Отправляем подтверждение
+        await callback.message.answer("✅ Спасибо! Ваш ответ сохранён.")
+        
+        # Если это не последний сегмент, отправляем следующий вопрос
+        if segment < 5:
+            # Определяем следующее состояние
+            next_states = {
+                1: SaturdayReflectionStates.answering_segment_2,
+                2: SaturdayReflectionStates.answering_segment_3,
+                3: SaturdayReflectionStates.answering_segment_4,
+                4: SaturdayReflectionStates.answering_segment_5,
+            }
+            next_state = next_states.get(segment)
+            if next_state and next_question:
+                await callback.message.answer(next_question)
+                await state.set_state(next_state)
+        else:
+            # Все сегменты пройдены - сохраняем все ответы в БД
+            try:
+                session = next(get_session())
+                try:
+                    user_repo = UserRepository(session)
+                    user = user_repo.get_by_telegram_id(callback.from_user.id)
+                    
+                    if user:
+                        reflection_repo = SaturdayReflectionRepository(session)
+                        reflection_date = date.today()
+                        
+                        # Сохраняем все ответы
+                        reflection_repo.create_or_update(
+                            user_id=user.id,
+                            reflection_date=reflection_date,
+                            segment_1=answers.get("segment_1"),
+                            segment_2=answers.get("segment_2"),
+                            segment_3=answers.get("segment_3"),
+                            segment_4=answers.get("segment_4"),
+                            segment_5=answers.get("segment_5"),
+                        )
+                        logger.info(f"[SATURDAY] Сохранена полная рефлексия для пользователя {user.id}")
+                finally:
+                    session.close()
+            except Exception as e:
+                logger.error(f"[SATURDAY] Ошибка при сохранении полной рефлексии в БД: {e}", exc_info=True)
+            
+            await callback.message.answer("🎉 Отлично! Вы завершили рефлексию стратсубботы. Все ваши ответы сохранены в карту личной стратегии.")
+            await state.clear()
+    else:
+        # Пользователь хочет изменить ответ - возвращаемся к вводу
+        answering_states = {
+            1: SaturdayReflectionStates.answering_segment_1,
+            2: SaturdayReflectionStates.answering_segment_2,
+            3: SaturdayReflectionStates.answering_segment_3,
+            4: SaturdayReflectionStates.answering_segment_4,
+            5: SaturdayReflectionStates.answering_segment_5,
+        }
+        await callback.message.answer("Хорошо, отправьте ваш ответ заново.")
+        await state.set_state(answering_states[segment])
+
+
+@router.callback_query(F.data.startswith("saturday_confirm_"))
+async def callback_saturday_confirm(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Все верно' для подтверждения ответа."""
+    segment = int(callback.data.split("_")[-1])
+    await _handle_saturday_confirmation(callback, state, segment, is_confirmed=True)
+
+
+@router.callback_query(F.data.startswith("saturday_edit_"))
+async def callback_saturday_edit(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Изменить' для редактирования ответа."""
+    segment = int(callback.data.split("_")[-1])
+    await _handle_saturday_confirmation(callback, state, segment, is_confirmed=False)
 
 

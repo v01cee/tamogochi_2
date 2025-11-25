@@ -1,0 +1,231 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Статистика всех касаний{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>📊 Статистика всех касаний</h1>
+    
+    <!-- Общая статистика -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🌅 Утренние касания</h5>
+                    <h2>{{ touch_answers_by_type.morning }}</h2>
+                    <small class="text-muted">За неделю: {{ touch_answers_week_morning }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🌞 Дневные касания</h5>
+                    <h2>{{ touch_answers_by_type.day }}</h2>
+                    <small class="text-muted">За неделю: {{ touch_answers_week_day }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🌙 Вечерние касания</h5>
+                    <h2>{{ touch_answers_by_type.evening }}</h2>
+                    <small class="text-muted">За неделю: {{ touch_answers_week_evening }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">📅 Стратсубботы</h5>
+                    <h2>{{ saturday_reflections_count }}</h2>
+                    <small class="text-muted">За неделю: {{ saturday_reflections_week }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Статистика вечерних оценок -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">📈 Вечерние оценки</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Всего оценок:</strong> {{ evening_ratings_count }}
+                            <br><small class="text-muted">За неделю: {{ evening_ratings_week }}</small>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Средняя энергия:</strong> {{ avg_energy }}/10
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Среднее счастье:</strong> {{ avg_happiness }}/10
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Средний прогресс:</strong> {{ avg_progress }}/10
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Последние ответы на касания -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>📝 Последние ответы на касания (все типы)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Пользователь</th>
+                                    <th>Тип касания</th>
+                                    <th>Дата</th>
+                                    <th>Вопрос</th>
+                                    <th>Ответ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for answer in recent_touch_answers %}
+                                <tr>
+                                    <td>{{ answer.user }}</td>
+                                    <td>{{ answer.touch_content.get_touch_type_display }}</td>
+                                    <td>{{ answer.touch_date|date:"d.m.Y" }}</td>
+                                    <td>Вопрос {{ answer.question_number }}</td>
+                                    <td>{{ answer.answer_text|truncatewords:10 }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center">Нет данных</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Последние вечерние рефлексии -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>🌙 Последние вечерние рефлексии</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Пользователь</th>
+                                    <th>Дата</th>
+                                    <th>Рефлексия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reflection in recent_evening_reflections %}
+                                <tr>
+                                    <td>{{ reflection.user }}</td>
+                                    <td>{{ reflection.reflection_date|date:"d.m.Y" }}</td>
+                                    <td>{{ reflection.reflection_text|truncatewords:15 }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center">Нет данных</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Последние вечерние оценки -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>⭐ Последние вечерние оценки</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Пользователь</th>
+                                    <th>Дата</th>
+                                    <th>Энергия</th>
+                                    <th>Счастье</th>
+                                    <th>Прогресс</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rating in recent_evening_ratings %}
+                                <tr>
+                                    <td>{{ rating.user }}</td>
+                                    <td>{{ rating.rating_date|date:"d.m.Y" }}</td>
+                                    <td>{{ rating.rating_energy }}</td>
+                                    <td>{{ rating.rating_happiness }}</td>
+                                    <td>{{ rating.rating_progress }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center">Нет данных</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Последние рефлексии стратсубботы -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>📅 Последние рефлексии стратсубботы</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Пользователь</th>
+                                    <th>Дата</th>
+                                    <th>Заполнено сегментов</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reflection in recent_saturday_reflections %}
+                                <tr>
+                                    <td>{{ reflection.user }}</td>
+                                    <td>{{ reflection.reflection_date|date:"d.m.Y" }}</td>
+                                    <td>{{ reflection.segments_completed }}/5</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center">Нет данных</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

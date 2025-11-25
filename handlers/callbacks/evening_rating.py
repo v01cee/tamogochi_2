@@ -8,8 +8,10 @@ from aiogram.types import CallbackQuery
 
 from core.config import settings
 from core.states import EveningRatingStates
+from datetime import date
 from database.session import get_session
 from repositories.user_repository import UserRepository
+from repositories.evening_rating_repository import EveningRatingRepository
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -71,14 +73,31 @@ async def _handle_rating_progress(callback: CallbackQuery, state: FSMContext):
     # Сохраняем обратно в Redis
     redis_client.set(data_key, json.dumps(redis_data), ex=3600)
     
-    # Сохраняем в БД (если нужно)
+    # Сохраняем в БД
     session = next(get_session())
     try:
         user_repo = UserRepository(session)
         user = user_repo.get_by_telegram_id(telegram_id)
         if user:
-            # TODO: Сохранить оценки в БД (можно создать модель EveningRating)
-            logger.info(f"Вечерние оценки для пользователя {user.id}: энергия={redis_data.get('rating_energy')}, счастье={redis_data.get('rating_happiness')}, прогресс={rating_value}")
+            rating_repo = EveningRatingRepository(session)
+            rating_date = date.today()
+            
+            # Получаем все оценки из Redis
+            rating_energy = redis_data.get('rating_energy')
+            rating_happiness = redis_data.get('rating_happiness')
+            
+            # Если все оценки есть, сохраняем
+            if rating_energy is not None and rating_happiness is not None:
+                rating_repo.create_or_update(
+                    user_id=user.id,
+                    rating_date=rating_date,
+                    rating_energy=rating_energy,
+                    rating_happiness=rating_happiness,
+                    rating_progress=rating_value,
+                )
+                logger.info(f"[EVENING_RATING] Сохранены оценки для пользователя {user.id}: энергия={rating_energy}, счастье={rating_happiness}, прогресс={rating_value}")
+            else:
+                logger.warning(f"[EVENING_RATING] Не все оценки получены для пользователя {user.id}, сохраняем только прогресс")
     finally:
         session.close()
     

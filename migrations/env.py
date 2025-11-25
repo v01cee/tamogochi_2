@@ -2,11 +2,31 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
-from core.config import settings
+# from core.config import settings
 from database.base import Base
 
 # Импорт всех моделей для autogenerate
 import models  # noqa
+
+# Используем настройки из core.config
+import os
+import sys
+from pathlib import Path
+
+# Добавляем корневую директорию проекта в sys.path
+project_root = Path(__file__).resolve().parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from core.config import settings
+    DB_URL = settings.db_url
+except ImportError:
+    # Fallback на переменные окружения, если core.config недоступен
+    DB_URL = os.getenv(
+        "DATABASE_URL",
+        f"postgresql://{os.getenv('POSTGRES_USER', 'admin')}:{os.getenv('POSTGRES_PASSWORD', '')}@{os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'testing_postgres')}"
+    )
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -29,7 +49,7 @@ target_metadata = Base.metadata
 
 def get_url():
     """Получить URL базы данных из настроек"""
-    return settings.db_url
+    return DB_URL
 
 
 def run_migrations_offline() -> None:

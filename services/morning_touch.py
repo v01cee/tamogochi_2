@@ -11,7 +11,7 @@ from aiogram import Bot
 from aiogram.types import FSInputFile
 from sqlalchemy import Select, func, or_, select, update
 
-from core.config import settings
+# from core.config import settings
 from core.texts import TEXTS
 from database.session import SessionLocal
 from models.touch_content import TouchContent
@@ -64,7 +64,7 @@ def _mark_users_sent(user_ids: Iterable[int], sent_at: datetime) -> None:
 
 async def send_morning_touch(bot: Bot) -> None:
     """Отправить утреннее сообщение всем активным подписчикам."""
-    tz = ZoneInfo(settings.timezone)
+    tz = ZoneInfo("Europe/Moscow")
     now = datetime.now(tz=tz)
     target_date = now.date()
 
@@ -152,7 +152,7 @@ async def _send_touch_content(bot: Bot, telegram_id: int, content: TouchContent,
     # Отправляем видео с описанием в caption
     video_sent = False
     if content.video_file_path:
-        file_path = Path(settings.media_root) / content.video_file_path
+        file_path = Path("media") / content.video_file_path
         if file_path.exists():
             await bot.send_video(
                 telegram_id,
@@ -194,6 +194,8 @@ async def _send_touch_content(bot: Bot, telegram_id: int, content: TouchContent,
             await bot.send_message(telegram_id, first_question)
             
             # Сохраняем состояние и данные в Redis для обработки ответов
+            from core.config import settings
+            
             redis_client = redis.Redis(
                 host=settings.redis_host,
                 port=settings.redis_port,
