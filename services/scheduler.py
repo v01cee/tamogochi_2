@@ -30,6 +30,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         name="morning_touch",
         id="morning_touch",
         replace_existing=True,
+        max_instances=1,  # Не запускать новый экземпляр, если предыдущий еще выполняется
     )
 
     scheduler.add_job(
@@ -39,6 +40,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         name="day_touch",
         id="day_touch",
         replace_existing=True,
+        max_instances=1,  # Не запускать новый экземпляр, если предыдущий еще выполняется
     )
 
     scheduler.add_job(
@@ -48,6 +50,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         name="evening_touch",
         id="evening_touch",
         replace_existing=True,
+        max_instances=1,  # Не запускать новый экземпляр, если предыдущий еще выполняется
     )
 
     # Стратсуббота: отправка сообщения о рефлексии в субботу в 12:00 МСК

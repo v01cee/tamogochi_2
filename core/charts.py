@@ -44,14 +44,19 @@ def generate_radar_chart(
     plot_values = numeric_values.tolist()
     plot_values += plot_values[:1]
 
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
     fig.patch.set_alpha(0.0)
 
     # Настройка сетки
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(labels, fontsize=11)
+    # Устанавливаем метки
+    ax.set_xticklabels(labels, fontsize=10)
+    # Увеличиваем отступ меток от центра после их создания
+    for label in ax.get_xticklabels():
+        label.set_horizontalalignment('center')
+    ax.tick_params(axis='x', pad=20)  # Устанавливаем отступ через tick_params
     ax.set_rlabel_position(180 / num_vars)
     ax.set_yticks(range(1, 11))
     ax.set_yticklabels([])
@@ -64,24 +69,28 @@ def generate_radar_chart(
     ax.fill(angles, plot_values, color="#f7b267", alpha=0.35)
 
     # Подписи значений на соответствующих осях
+    # Увеличиваем отступ от значения, чтобы числа не накладывались на метки
     for angle, value in zip(angles[:-1], plot_values[:-1]):
+        # Вычисляем позицию для числа так, чтобы оно было между меткой и значением
+        text_radius = max(value + 0.6, 1.5)  # Минимальный отступ от центра
         ax.text(
             angle,
-            value + 0.4,
+            text_radius,
             f"{value:.0f}",
             color="#444444",
-            fontsize=11,
+            fontsize=10,
             fontweight="bold",
             ha="center",
             va="center",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8, edgecolor="none"),
         )
 
     if title:
-        ax.set_title(title, pad=20, fontsize=14, fontweight="semibold")
+        ax.set_title(title, pad=30, fontsize=14, fontweight="semibold")
 
     buffer = io.BytesIO()
-    plt.tight_layout()
-    plt.savefig(buffer, format="png", transparent=True)
+    plt.tight_layout(pad=2.0)
+    plt.savefig(buffer, format="png", transparent=True, dpi=150, bbox_inches="tight")
     plt.close(fig)
     buffer.seek(0)
     return buffer.read()

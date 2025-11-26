@@ -70,80 +70,87 @@ def _mark_users_sent(user_ids: List[int], sent_at: datetime) -> None:
 
 async def send_evening_touch(bot: Bot) -> None:
     """Отправить вечернее сообщение всем активным подписчикам."""
-    tz = ZoneInfo("Europe/Moscow")
-    now = datetime.now(tz=tz)
-    target_date = now.date()
-    
-    # Получаем bot_id один раз
-    bot_info = await bot.get_me()
-    bot_id = bot_info.id
-
-    users = await asyncio.to_thread(_fetch_users, target_date)
-    if not users:
-        logger.info("Вечернее касание: нет пользователей для отправки")
-        return
-
-    logger.info("Вечернее касание: отправляем %s пользователям", len(users))
-
-    target_time = now.time().replace(second=0, microsecond=0)
-
-    # Фильтруем пользователей по времени
-    filtered_users = [
-        (user_id, telegram_id)
-        for user_id, telegram_id, user_time in users
-        if (user_time or DEFAULT_EVENING_TIME) == target_time
-    ]
-
-    if not filtered_users:
-        logger.info("Вечернее касание: нет пользователей для отправки в это время")
-        return
-
-    logger.info("Вечернее касание: отправляем %s пользователям (после фильтрации по времени)", len(filtered_users))
-
-    async def send_to_user(user_id: int, telegram_id: int) -> bool:
-        """Отправить сообщение одному пользователю."""
+    try:
+        tz = ZoneInfo("Europe/Moscow")
+        now = datetime.now(tz=tz)
+        target_date = now.date()
+        
+        # Получаем bot_id один раз (с обработкой сетевых ошибок)
         try:
-            content = await asyncio.to_thread(
-                _get_content_for_user,
-                user_id,
-                now.date(),
-            )
+            bot_info = await bot.get_me()
+            bot_id = bot_info.id
+        except Exception as e:
+            logger.error("Не удалось получить bot_id (сетевые проблемы): %s", e)
+            return
 
-            if not content:
-                logger.warning("Нет контента для вечернего касания (user %s)", user_id)
+        users = await asyncio.to_thread(_fetch_users, target_date)
+        if not users:
+            logger.info("Вечернее касание: нет пользователей для отправки")
+            return
+
+        logger.info("Вечернее касание: отправляем %s пользователям", len(users))
+
+        target_time = now.time().replace(second=0, microsecond=0)
+
+        # Фильтруем пользователей по времени
+        filtered_users = [
+            (user_id, telegram_id)
+            for user_id, telegram_id, user_time in users
+            if (user_time or DEFAULT_EVENING_TIME) == target_time
+        ]
+
+        if not filtered_users:
+            logger.info("Вечернее касание: нет пользователей для отправки в это время")
+            return
+
+        logger.info("Вечернее касание: отправляем %s пользователям (после фильтрации по времени)", len(filtered_users))
+
+        async def send_to_user(user_id: int, telegram_id: int) -> bool:
+            """Отправить сообщение одному пользователю."""
+            try:
+                content = await asyncio.to_thread(
+                    _get_content_for_user,
+                    user_id,
+                    now.date(),
+                )
+
+                if not content:
+                    logger.warning("Нет контента для вечернего касания (user %s)", user_id)
+                    return False
+
+                # Отправляем видео или описание
+                await _send_evening_content(bot, telegram_id, content)
+                
+                # Отправляем первый вопрос оценки
+                await _send_first_rating_question(bot, telegram_id, bot_id=bot_id, touch_content_id=content.id)
+                
+                return True
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Не удалось отправить вечернее сообщение %s: %s", telegram_id, exc)
                 return False
 
-            # Отправляем видео или описание
-            await _send_evening_content(bot, telegram_id, content)
-            
-            # Отправляем первый вопрос оценки
-            await _send_first_rating_question(bot, telegram_id, bot_id=bot_id, touch_content_id=content.id)
-            
-            return True
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Не удалось отправить вечернее сообщение %s: %s", telegram_id, exc)
-            return False
+        # Создаем задачи для параллельной отправки (limited-aiogram автоматически контролирует лимиты)
+        sent_user_ids: List[int] = []
+        tasks = []
+        
+        for user_id, telegram_id in filtered_users:
+            # Создаем задачу для отправки
+            task = asyncio.create_task(send_to_user(user_id, telegram_id))
+            tasks.append((user_id, task))
 
-    # Создаем задачи для параллельной отправки (limited-aiogram автоматически контролирует лимиты)
-    sent_user_ids: List[int] = []
-    tasks = []
-    
-    for user_id, telegram_id in filtered_users:
-        # Создаем задачу для отправки
-        task = asyncio.create_task(send_to_user(user_id, telegram_id))
-        tasks.append((user_id, task))
+        # Ждем завершения всех задач параллельно
+        results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
+        
+        for (user_id, _), result in zip(tasks, results):
+            if isinstance(result, Exception):
+                logger.warning("Ошибка при отправке пользователю %s: %s", user_id, result)
+            elif result is True:
+                sent_user_ids.append(user_id)
 
-    # Ждем завершения всех задач параллельно
-    results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
-    
-    for (user_id, _), result in zip(tasks, results):
-        if isinstance(result, Exception):
-            logger.warning("Ошибка при отправке пользователю %s: %s", user_id, result)
-        elif result is True:
-            sent_user_ids.append(user_id)
-
-    await asyncio.to_thread(_mark_users_sent, sent_user_ids, now)
-    logger.info("Вечернее касание: отправлено %s сообщений", len(sent_user_ids))
+        await asyncio.to_thread(_mark_users_sent, sent_user_ids, now)
+        logger.info("Вечернее касание: отправлено %s сообщений", len(sent_user_ids))
+    except Exception as exc:
+        logger.error("Критическая ошибка в send_evening_touch: %s", exc, exc_info=True)
 
 
 async def _send_evening_content(bot: Bot, telegram_id: int, content: TouchContent) -> None:
@@ -207,7 +214,7 @@ async def _send_first_rating_question(bot: Bot, telegram_id: int, bot_id: int = 
     keyboard = keyboard_builder.as_markup()
     
     # Отправляем первый вопрос
-    question_text = "1/5 Оцените уровень энергии"
+    question_text = "По шкале от 1 до 10 оцени свой уровень энергии в течение дня"
     await bot.send_message(telegram_id, question_text, reply_markup=keyboard)
     
     # Сохраняем состояние в Redis

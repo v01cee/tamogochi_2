@@ -82,12 +82,11 @@ async def callback_username_confirm_yes(callback: CallbackQuery, state: FSMConte
     role_text = get_booking_text("role_request")
     role_keyboard = await keyboard_ops.create_keyboard(
         buttons={
-            "Собственник бизнеса": "role_business_owner",
+            "Топ-менеджер": "role_business_owner",
             "СЕО": "role_ceo",
-            "Топ-менеджер": "role_top_manager",
             "Middle-руководитель": "role_middle_manager",
             "Специалист": "role_specialist",
-            "Другое": "role_other",
+            "Предприниматель": "role_other",
         },
         interval=2,
     )
@@ -105,7 +104,7 @@ async def callback_role_selected(callback: CallbackQuery, state: FSMContext):
         await state.set_state(ProfileStates.waiting_for_role)
     else:
         role_mapping = {
-            "business_owner": "Собственник бизнеса",
+            "business_owner": "Топ-менеджер",
             "ceo": "СЕО",
             "top_manager": "Топ-менеджер",
             "middle_manager": "Middle-руководитель",

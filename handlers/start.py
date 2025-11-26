@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import date, time
@@ -63,20 +64,42 @@ async def cmd_start(message: Message):
         return
 
     # Если первый визит, показываем вводные сообщения
-    text = get_booking_text("start")
-    await message.answer(text)
-    
-    # Отправляем второе сообщение курса
-    step_1_text = get_booking_text("step_1")
-    await message.answer(step_1_text)
-    
-    # Отправляем третье сообщение с кнопкой "Старт"
-    step_2_text = get_booking_text("step_2")
-    start_buttons = {
-        "Старт": "course_start"
-    }
-    start_keyboard = await keyboard_ops.create_keyboard(buttons=start_buttons, interval=1)
-    await message.answer(step_2_text, reply_markup=start_keyboard)
+    try:
+        text = get_booking_text("start")
+        if text:
+            await message.answer(text)
+            logger.info(f"[START] Отправлено первое сообщение для пользователя {message.from_user.id}")
+            # Небольшая задержка между сообщениями
+            await asyncio.sleep(0.5)
+        
+        # Отправляем второе сообщение курса
+        step_1_text = get_booking_text("step_1")
+        if step_1_text:
+            await message.answer(step_1_text)
+            logger.info(f"[START] Отправлено второе сообщение для пользователя {message.from_user.id}")
+            # Небольшая задержка между сообщениями
+            await asyncio.sleep(0.5)
+        else:
+            logger.warning(f"[START] step_1_text пустой для пользователя {message.from_user.id}")
+        
+        # Отправляем третье сообщение с кнопкой "Старт"
+        step_2_text = get_booking_text("step_2")
+        if step_2_text:
+            start_buttons = {
+                "Старт": "course_start"
+            }
+            start_keyboard = await keyboard_ops.create_keyboard(buttons=start_buttons, interval=1)
+            await message.answer(step_2_text, reply_markup=start_keyboard)
+            logger.info(f"[START] Отправлено третье сообщение с кнопкой для пользователя {message.from_user.id}")
+        else:
+            logger.warning(f"[START] step_2_text пустой для пользователя {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"[START] Ошибка при отправке вводных сообщений для пользователя {message.from_user.id}: {e}", exc_info=True)
+        # Пытаемся отправить хотя бы основное сообщение
+        try:
+            await message.answer("Произошла ошибка при загрузке вводных сообщений. Пожалуйста, попробуйте позже или напишите нам.")
+        except:
+            pass
 
 
 @router.message(Command("help"))
@@ -205,45 +228,76 @@ async def _format_with_llm(text: str, title: str) -> str:
     cleaned = (text or "").strip()
     if not cleaned:
         return cleaned
-
+    
+    # Проверка на бессмысленный/слишком короткий текст
+    if len(cleaned) < 3:
+        logger.warning(f"Текст слишком короткий для обработки: '{cleaned}'")
+        return f"[Не удалось разобрать текст: '{cleaned}'. Пожалуйста, напишите более подробно.]"
+    
+    # Проверка на случайные символы без пробелов (если текст короткий и без пробелов)
+    if len(cleaned) < 20 and ' ' not in cleaned:
+        # Проверяем, есть ли хотя бы одна русская или английская буква
+        has_letters = any(c.isalpha() for c in cleaned)
+        if not has_letters:
+            logger.warning(f"Текст содержит только не-буквенные символы: '{cleaned}'")
+            return f"[Не удалось разобрать текст: '{cleaned}'. Пожалуйста, напишите более подробно.]"
+    
     prompt = (
-        f"Отформатируй список ответов участника курса. "
-        f"ВАЖНО: Верни ТОЛЬКО форматированный список для раздела '{title}'. "
-        f"НЕ добавляй информацию о других разделах (цели, вызовы и т.д.). "
-        f"НЕ добавляй лишних комментариев или объяснений. "
-        f"Верни только заголовок '{title}' и пункты списка под ним. "
-        f"Формат: '{title}'\n\n- пункт 1\n- пункт 2\n- пункт 3\n\n"
+        f"Отформатируй список ответов участника курса.\n"
+        f"Раздел: '{title}'.\n"
+        f"ВАЖНО:\n"
+        f"- Если текст непонятный, бессмысленный, слишком короткий или похож на случайные символы - верни ТОЧНО эту строку: 'UNPARSEABLE_TEXT'\n"
+        f"- Верни ТОЛЬКО пункты списка, без заголовка.\n"
+        f"- НЕ добавляй слова 'Ваши цели', 'Ваши вызовы', 'Цели', 'Вызовы' и т.п. в начале.\n"
+        f"- НЕ добавляй лишних комментариев или объяснений.\n"
+        f"- НЕ выдумывай и не придумывай пункты, которых нет в тексте пользователя.\n"
+        f"- Если в тексте пользователя нет осмысленных пунктов - верни 'UNPARSEABLE_TEXT'.\n"
+        f"Формат: '- пункт 1\\n- пункт 2\\n- пункт 3'.\n\n"
         f"Ответы пользователя:\n{cleaned}"
     )
 
     try:
         result = (await generate_qwen_response(prompt)).strip()
         if result:
-            # Убираем возможные дубликаты заголовка и лишние части
-            # Оставляем только первую часть до следующего заголовка (если есть)
-            lines = result.split('\n')
-            filtered_lines = []
-            found_title = False
-            skip_until_title = False
+            # Проверяем, не вернула ли модель маркер о непонятном тексте
+            if "UNPARSEABLE_TEXT" in result.upper():
+                logger.warning(f"Qwen не смог разобрать текст: '{cleaned}'")
+                return f"[Не удалось разобрать текст: '{cleaned}'. Пожалуйста, напишите более подробно.]"
             
+            # 1) Срезаем всё после возможного второго заголовка (цели/вызовы) —
+            # на случай если модель вернула два блока.
+            lines = result.split("\n")
+            filtered: list[str] = []
             for line in lines:
-                line_stripped = line.strip()
-                # Если нашли наш заголовок, начинаем собирать
-                if title.lower() in line_stripped.lower() and not found_title:
-                    found_title = True
-                    filtered_lines.append(line)
-                    continue
-                # Если нашли другой заголовок (цели/вызовы), останавливаемся
-                if found_title and ('цели' in line_stripped.lower() or 'вызовы' in line_stripped.lower()) and title.lower() not in line_stripped.lower():
+                low = line.lower()
+                if filtered and ("цели" in low or "вызовы" in low):
                     break
-                # Если уже нашли заголовок, добавляем строки
-                if found_title:
-                    filtered_lines.append(line)
+                filtered.append(line)
+            result = "\n".join(filtered).strip()
+
+            # 2) Удаляем заголовок в начале строки вида "Ваши цели: ..." / "Цели - ..." и т.п.
+            import re
+
+            header_pattern = re.compile(
+                r"^\s*(ваши\s+цели|цели|ваши\s+вызовы|вызовы)\s*[:\-–—]*\s*",
+                flags=re.IGNORECASE,
+            )
+            result = header_pattern.sub("", result, count=1).strip()
+
+            # 3) Проверяем, что результат не содержит намного больше информации, чем исходный текст
+            # (Qwen не должен придумывать отсебятину)
+            original_word_count = len(cleaned.split())
+            result_word_count = len(result.split())
             
-            # Если нашли заголовок, возвращаем отфильтрованный результат
-            if found_title:
-                result = '\n'.join(filtered_lines).strip()
-            
+            # Если результат содержит в 3+ раза больше слов, чем исходный текст - подозрительно
+            # Исключение: если исходный текст был очень коротким (1-2 слова), но результат разумный
+            if original_word_count > 3 and result_word_count > original_word_count * 3:
+                logger.warning(
+                    f"Подозрение на выдуманные пункты: исходный текст ({original_word_count} слов): '{cleaned[:50]}...', "
+                    f"результат ({result_word_count} слов): '{result[:100]}...'"
+                )
+                return f"[Не удалось разобрать текст: '{cleaned}'. Пожалуйста, напишите более подробно.]"
+
             if result:
                 return result
     except Exception as exc:  # pylint: disable=broad-except
@@ -254,24 +308,14 @@ async def _format_with_llm(text: str, title: str) -> str:
 
 @router.message(ProfileStates.waiting_for_challenges)
 async def process_challenges(message: Message, state: FSMContext):
-    """Обработчик текстовых/голосовых сообщений для вызовов"""
-    try:
-        challenges_text, is_voice = await _extract_text(message)
-    except ValueError as e:
-        # Это наше сообщение о том, что нужно отправить текст
-        error_msg = str(e)
-        logger.info("Пользователь отправил голосовое сообщение, просим текст: %s", error_msg)
-        await message.answer(error_msg)
+    """Обработчик текстовых сообщений для вызовов"""
+    # Проверяем, что это текстовое сообщение
+    if message.voice:
+        await message.answer("Пожалуйста, отправьте текстовое сообщение.")
         return
-    except TimeoutError as e:
-        logger.error("Таймаут при транскрипции: %s", e, exc_info=True)
-        await message.answer("Сервер обрабатывает голосовое сообщение слишком долго. Попробуйте отправить более короткое сообщение или повторите попытку позже.")
-        return
-    except Exception as e:
-        logger.error("Ошибка при извлечении текста: %s", e, exc_info=True)
-        await message.answer("Пожалуйста, отправьте текстовое сообщение. Мы обработаем его с помощью ИИ для лучшего форматирования.")
-        return
-
+    
+    challenges_text = message.text or (message.caption if message.caption else "")
+    
     if not challenges_text:
         await message.answer("Пожалуйста, отправьте текстовое сообщение.")
         return
@@ -289,7 +333,7 @@ async def process_challenges(message: Message, state: FSMContext):
         # Показываем данные для проверки
         review_text = get_booking_text("data_review").replace("%N%", challenges, 1).replace("%N%", goals, 1)
         review_buttons = {
-            "Изменить": "edit_profile_data",
+            "Хочу изменить": "edit_profile_data",
             "Все верно": "confirm_profile_data"
         }
         review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -298,7 +342,7 @@ async def process_challenges(message: Message, state: FSMContext):
         # Если целей еще нет, показываем только вызовы для проверки
         review_text = f"Ваши вызовы: {challenges}\n\nВсе верно?"
         review_buttons = {
-            "Изменить": "edit_profile_data",
+            "Хочу изменить": "edit_profile_data",
             "Все верно": "confirm_profile_data"
         }
         review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -322,7 +366,7 @@ async def process_goals(message: Message, state: FSMContext):
         return
     except Exception as e:
         logger.error("Ошибка при извлечении текста: %s", e, exc_info=True)
-        await message.answer("Пожалуйста, отправьте текстовое сообщение. Мы обработаем его с помощью ИИ для лучшего форматирования.")
+        await message.answer("Пожалуйста, отправьте текстовое сообщение.")
         return
 
     if not goals_text:
@@ -344,7 +388,7 @@ async def process_goals(message: Message, state: FSMContext):
     # Показываем данные для проверки
     review_text = get_booking_text("data_review").replace("%N%", challenges, 1).replace("%N%", goals, 1)
     review_buttons = {
-        "Изменить": "edit_profile_data",
+        "Хочу изменить": "edit_profile_data",
         "Все верно": "confirm_profile_data"
     }
     review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -454,8 +498,8 @@ async def process_name(message: Message, state: FSMContext):
         # Показываем подтверждение ника
         username_confirm_text = get_booking_text("username_confirm").replace("%NNN%", f"@{username}")
         username_buttons = {
-            "ДА": "username_confirm_yes",
-            "НЕТ": "username_confirm_no"
+            "Да": "username_confirm_yes",
+            "Нет": "username_confirm_no"
         }
         username_keyboard = await keyboard_ops.create_keyboard(buttons=username_buttons, interval=2)
         await message.answer(username_confirm_text, reply_markup=username_keyboard)
@@ -485,8 +529,8 @@ async def process_username(message: Message, state: FSMContext):
     # Показываем подтверждение ника
     username_confirm_text = get_booking_text("username_confirm").replace("%NNN%", f"@{username}")
     username_buttons = {
-        "ДА": "username_confirm_yes",
-        "НЕТ": "username_confirm_no"
+        "Да": "username_confirm_yes",
+        "Нет": "username_confirm_no"
     }
     username_keyboard = await keyboard_ops.create_keyboard(buttons=username_buttons, interval=2)
     await message.answer(username_confirm_text, reply_markup=username_keyboard)
@@ -523,7 +567,7 @@ async def process_editing_name(message: Message, state: FSMContext):
     review_text = review_text.replace("%N%", company, 1)
     
     review_buttons = {
-        "Изменить": "edit_profile_personal_data",
+        "Изменить данные": "edit_profile_personal_data",
         "Верно": "confirm_profile_personal_data"
     }
     review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -554,7 +598,7 @@ async def process_editing_role(message: Message, state: FSMContext):
     review_text = review_text.replace("%N%", company, 1)
     
     review_buttons = {
-        "Изменить": "edit_profile_personal_data",
+        "Изменить данные": "edit_profile_personal_data",
         "Верно": "confirm_profile_personal_data"
     }
     review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -585,7 +629,7 @@ async def process_editing_company(message: Message, state: FSMContext):
     review_text = review_text.replace("%N%", company, 1)
     
     review_buttons = {
-        "Изменить": "edit_profile_personal_data",
+        "Изменить данные": "edit_profile_personal_data",
         "Верно": "confirm_profile_personal_data"
     }
     review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -639,7 +683,7 @@ async def process_company(message: Message, state: FSMContext):
     review_text = review_text.replace("%N%", company, 1)
     
     review_buttons = {
-        "Изменить": "edit_profile_personal_data",
+        "Изменить данные": "edit_profile_personal_data",
         "Верно": "confirm_profile_personal_data"
     }
     review_keyboard = await keyboard_ops.create_keyboard(buttons=review_buttons, interval=2)
@@ -873,7 +917,7 @@ async def _process_touch_question_answer_internal(message: Message, state: FSMCo
         
         # Показываем клавиатуру с кнопками "Перезаписать" и "Фиксируем"
         keyboard_buttons = {
-            "Перезаписать": "touch_voice_rerecord",
+            "Хочу перезаписать": "touch_voice_rerecord",
             "Фиксируем": "touch_voice_confirm"
         }
         keyboard = await keyboard_ops.create_keyboard(buttons=keyboard_buttons, interval=2)
@@ -1669,11 +1713,11 @@ async def _process_saturday_reflection_answer(
         elif message.text:
             raw_text = message.text.strip()
         else:
-            await message.answer("Пожалуйста, отправьте текстовое или голосовое сообщение.")
+            await message.answer("Пожалуйста, отправьте текстовое сообщение.")
             return
         
         if not raw_text or not raw_text.strip():
-            await message.answer("Пожалуйста, отправьте текстовое или голосовое сообщение.")
+            await message.answer("Пожалуйста, отправьте текстовое сообщение.")
             return
         
         # Отправляем в Qwen для обработки

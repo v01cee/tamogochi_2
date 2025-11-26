@@ -1,0 +1,84 @@
+=== КОМАНДЫ ДЛЯ GIT ===
+
+# 1. Инициализация (если еще не сделано)
+git init
+
+# 2. Добавить все файлы
+git add .
+
+# 3. Первый коммит
+git commit -m "Initial commit: Telegram bot for Life Strategies course"
+
+# 4. Добавить удаленный репозиторий (замените URL на свой)
+git remote add origin https://github.com/ваш-username/название-репозитория.git
+
+# 5. Отправить в репозиторий
+git push -u origin main
+# или если ветка master:
+git push -u origin master
+
+# 6. Дальнейшие коммиты после изменений
+git add .
+git commit -m "Описание изменений"
+git push
+
+
+=== КОМАНДЫ ДЛЯ ДЕПЛОЯ НА СЕРВЕРЕ ===
+
+# 1. Клонирование репозитория на сервер
+git clone https://github.com/ваш-username/название-репозитория.git
+cd название-репозитория
+
+# 2. Создание .env файла
+cp env.example .env
+nano .env  # заполните все переменные, сохраните (Ctrl+O, Enter, Ctrl+X)
+
+# 3. Автоматический деплой
+chmod +x deploy.sh
+./deploy.sh
+
+# ИЛИ ручной деплой:
+# 3.1. Остановка старых контейнеров
+docker-compose down
+
+# 3.2. Сборка образов
+docker-compose build --no-cache
+
+# 3.3. Запуск контейнеров
+docker-compose up -d
+
+# 3.4. Миграции Alembic
+docker-compose exec bot alembic upgrade head
+
+# 3.5. Миграции Django
+docker-compose exec admin python admin_panel/manage.py migrate --noinput
+
+# 3.6. Статические файлы Django
+docker-compose exec admin python admin_panel/manage.py collectstatic --noinput
+
+# 3.7. Создание суперпользователя (при первом запуске)
+docker-compose exec admin python admin_panel/manage.py createsuperuser
+
+
+=== ПРОВЕРКА РАБОТЫ ===
+
+# Статус контейнеров
+docker-compose ps
+
+# Логи бота
+docker-compose logs -f bot
+
+# Логи админки
+docker-compose logs -f admin
+
+
+=== ОБНОВЛЕНИЕ ПРОЕКТА ===
+
+# На сервере в директории проекта:
+git pull
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+docker-compose exec bot alembic upgrade head
+docker-compose exec admin python admin_panel/manage.py migrate --noinput
+

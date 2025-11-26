@@ -26,7 +26,7 @@ async def _handle_rating_energy(callback: CallbackQuery, state: FSMContext):
         state,
         rating_value,
         current_question=1,
-        next_question_text="2/5 Оцените уровень счастья",
+        next_question_text="По шкале от 1 до 10 оцени уровень счастья в деятельности сегодня",
         next_state=EveningRatingStates.rating_happiness,
         next_state_name="rating_happiness",
         rating_key="rating_energy"
@@ -42,7 +42,7 @@ async def _handle_rating_happiness(callback: CallbackQuery, state: FSMContext):
         state,
         rating_value,
         current_question=2,
-        next_question_text="3/5 Оцените продвижение к результату/целям курса",
+        next_question_text="По шкале от 1 до 10 оцени, насколько сегодня ты продвинулся к своим значимым результатам",
         next_state=EveningRatingStates.rating_progress,
         next_state_name="rating_progress",
         rating_key="rating_happiness"
@@ -104,7 +104,7 @@ async def _handle_rating_progress(callback: CallbackQuery, state: FSMContext):
     await callback.answer(f"Вы выбрали: {rating_value}")
     
     # Отправляем сообщение о рефлексии
-    reflection_text = "Напиши или наговори подробную рефлексию. Это важно для формирования твоей мини-стратегии: что оказалось ключевым для тебя, на что обратить внимание, что требует фокуса"
+    reflection_text = "Вечерняя рефлексия - одна из самых важных практик каждого дня! Мы учимся осознанному разбору и анализу прожитого опыта.  Пожалуйста, подробно ответь на вопросы ниже - письменно или голосовым сообщением. Бот соберет ключевые мысли в твою личную стратегию."
     await callback.message.answer(reflection_text)
     
     # Получаем touch_content_id и отправляем вопросы из админки

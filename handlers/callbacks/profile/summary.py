@@ -80,6 +80,9 @@ async def callback_confirm_profile_data(callback: CallbackQuery, state: FSMConte
         return
 
     # Если цели уже есть, переходим к выбору подписки
+    # Сохраняем контекст, откуда пришли, чтобы можно было вернуться из оплаты
+    await state.update_data(payment_source_context="subscription_choice")
+    
     subscription_text = get_booking_text("subscription_choice")
     subscription_keyboard = await keyboard_ops.create_keyboard(
         buttons={

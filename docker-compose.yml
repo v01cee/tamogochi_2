@@ -56,7 +56,10 @@ services:
     restart: unless-stopped
     volumes:
       - .:/app
-    command: python bot.py
+    depends_on:
+      - postgres
+      - redis
+    command: sh -c "./wait-for-db.sh ${POSTGRES_HOST:-postgres} 'alembic upgrade head && python bot.py'"
 
   admin:
     build:
@@ -70,7 +73,9 @@ services:
       - .:/app
     ports:
       - "8042:8042"
-    command: sh -c "python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042"
+    depends_on:
+      - postgres
+    command: sh -c "./wait-for-db.sh ${POSTGRES_HOST:-postgres} 'python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py collectstatic --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042'"
 
 volumes:
   postgres_data:

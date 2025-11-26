@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
@@ -12,6 +14,7 @@ from repositories.user_repository import UserRepository
 
 router = Router()
 keyboard_ops = KeyboardOperations()
+logger = logging.getLogger(__name__)
 
 
 def _create_rating_keyboard():
@@ -33,6 +36,14 @@ def _create_rating_keyboard():
 @router.callback_query(F.data == "more_details")
 async def callback_more_details(callback: CallbackQuery, state: FSMContext):
     """Запуск квиза после экрана 'Подробнее'."""
+    await callback.answer()
+    
+    # Удаляем сообщение с кнопками
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+    
     text = get_booking_text("quiz_start")
     await callback.message.answer(text)
 
@@ -44,7 +55,6 @@ async def callback_more_details(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(question_1, reply_markup=rating_keyboard)
 
     await state.set_state(QuizStates.answering_question_1)
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("quiz_answer_"), QuizStates.answering_question_1)

@@ -56,6 +56,7 @@ MAIN_MENU_BUTTONS = {
     "Стратегия дня": "day_strategy",
     "Настройка бота": "bot_settings",
     "Моя подписка": "my_subscription",
+    "Запустить курс в своей компании": "subscription_company_offer",
 }
 
 ABOUT_BUTTONS = {
@@ -64,26 +65,25 @@ ABOUT_BUTTONS = {
 }
 
 COMPANY_BUTTONS = {
-    "🌐 Сайт": ("url", "https://happinessinaction.ru/"),
-    "👉 Переход в ТГ": ("url", "https://t.me/guzenuk"),
+    "Сайт компании": ("url", "https://happinessinaction.ru/"),
+    "Telegram-канал Филиппа": ("url", "https://t.me/guzenuk"),
     "👉 Переход в ВК": "link_vk",
     "Продолжить": "continue_after_company",
 }
 
 VIDEO_BUTTONS = {
-    "👉 Посмотреть видео": "watch_video",
+    "👉Смотреть видео": "watch_video",
     "Продолжить": "continue_after_video_intro",
 }
 
 PAYMENT_BUTTONS = {
-    "Оплата": "payment",
-    "Подробнее": "more_details",
+    "Оплатить подписку на 30 дней": "payment",
+    "Попробовать 7 дней бесплатно": "more_details",
 }
 
 SUBSCRIPTION_BUTTONS = {
     "Назад": "back_to_menu",
     "Оплатить подписку": "payment",
-    "Познакомиться поближе": "know_better",
 }
 
 NOTIFICATION_ENTRY_BUTTONS = {
@@ -232,8 +232,8 @@ async def callback_bot_settings(callback: CallbackQuery, state: FSMContext):
     
     # Кнопки для настройки уведомлений
     notification_setup_buttons = {
-        "Настроить под себя": "notification_customize",
-        "Дефолтные настройки": "notification_use_default",
+        "Настроить свое время": "notification_customize",
+        "Настройки по умолчанию": "notification_use_default",
         "Назад": "back_to_menu",
     }
     
@@ -247,8 +247,11 @@ async def callback_bot_settings(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "my_subscription")
-async def callback_my_subscription(callback: CallbackQuery):
+async def callback_my_subscription(callback: CallbackQuery, state: FSMContext):
     """Информация о подписке и действия."""
+    # Сохраняем контекст, откуда пришли, чтобы можно было вернуться из оплаты
+    await state.update_data(payment_source_context="my_subscription")
+    
     session = next(get_session())
     try:
         user_repo = UserRepository(session)
@@ -272,6 +275,18 @@ async def callback_my_subscription(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "subscription_company_offer")
+async def callback_subscription_company_offer(callback: CallbackQuery):
+    """Обработчик кнопки 'Запустить курс в своей компании'."""
+    await _send_keyboard_message(
+        callback,
+        get_booking_text("subscription_company_offer"),
+        {"<- Назад": "back_to_menu"},
+        interval=1,
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data == "about_bot")
 async def callback_about_bot(callback: CallbackQuery):
     """Экран 'О боте'."""
@@ -287,6 +302,9 @@ async def callback_about_bot(callback: CallbackQuery):
 @router.callback_query(F.data == "day_strategy")
 async def callback_day_strategy(callback: CallbackQuery):
     """Экран 'Стратегия дня'."""
+    # Отвечаем на callback query сразу, чтобы избежать таймаута
+    await callback.answer()
+    
     session_gen = get_session()
     session = next(session_gen)
     try:
@@ -296,7 +314,7 @@ async def callback_day_strategy(callback: CallbackQuery):
         except Exception as db_error:
             # Если БД недоступна, продолжаем работу без сохранения
             logger.warning(f"Не удалось получить пользователя из БД: {db_error}. Продолжаем работу.")
-            await callback.answer("База данных временно недоступна. Попробуйте позже.")
+            await callback.message.answer("База данных временно недоступна. Попробуйте позже.")
             return
 
         if not user:
@@ -320,70 +338,124 @@ async def callback_day_strategy(callback: CallbackQuery):
                 {"Понятно, идем дальше": "understood_move_on"},
                 interval=1,
             )
-            await callback.answer()
             return
 
-        # Если не первый раз - показываем все контенты для дня 1 (тестово)
-        test_course_day = 1  # Тестово используем день 1
-        
-        logger.info(f"[DAY_STRATEGY] Пользователь {callback.from_user.id}: отправляем контент для дня {test_course_day}")
-        
+        # Если не первый раз - показываем тот же контент «Стратегии дня», что и в дневном касании
+        tz = ZoneInfo("Europe/Moscow")
+        today = datetime.now(tz=tz).date()
+
+        logger.info(
+            "[DAY_STRATEGY] Пользователь %s: рассчитываем день курса для даты %s",
+            callback.from_user.id,
+            today,
+        )
+
+        course_day = calculate_course_day(user, today)
         touch_repo = TouchContentRepository(session)
-        
-        # Получаем все три типа касаний для дня 1
-        touch_types = ["morning", "day", "evening"]
-        touch_labels = {"morning": "🌅 Утро", "day": "🌞 День", "evening": "🌙 Вечер"}
-        
-        any_content_found = False
-        
-        # Отправляем контент для каждого типа касания
-        for touch_type in touch_types:
-            content = touch_repo.get_for_day(touch_type, test_course_day)
+
+        # Будем отправлять три касания: утро, день, вечер — как в реальных рассылках
+        touch_order = [
+            ("morning", "Касание УТРО"),
+            ("day", "Касание ДЕНЬ"),
+            ("evening", "Касание ВЕЧЕР"),
+        ]
+
+        # Базовая директория для видеофайлов касаний (Django складывает их в admin_panel/media)
+        from pathlib import Path
+
+        media_base = Path("admin_panel") / "media"
+
+        any_content_sent = False
+
+        for touch_type, header in touch_order:
+            content = fetch_touch_content(touch_repo, touch_type=touch_type, course_day=course_day)
             if not content:
-                # Если нет контента для конкретного дня, пробуем дефолтный
-                content = touch_repo.get_default(touch_type)
-            
-            if content:
-                any_content_found = True
-                logger.info(f"[DAY_STRATEGY] Отправляем {touch_type}: id={content.id}, summary={'есть' if content.summary else 'нет'}, video_url={'есть' if content.video_url else 'нет'}, questions={'есть' if content.questions else 'нет'}")
-                
-                # Отправляем заголовок типа касания
-                await callback.message.answer(f"{touch_labels.get(touch_type, touch_type.capitalize())}")
-                
-                # Шаг 1: Отправляем описание (summary) - если есть
-                if content.summary:
-                    summary_text = content.summary.strip()
-                    await callback.message.answer(summary_text)
-                
-                # Шаг 2: Отправляем ссылку на видео - если есть
-                if content.video_url:
-                    video_url = content.video_url.strip()
-                    await callback.message.answer(video_url)
-                
-                # Шаг 3: Отправляем вопросы - если есть (одним сообщением)
-                if content.questions:
-                    questions_text = content.questions.strip()
-                    # Отправляем все вопросы одним сообщением
-                    await callback.message.answer(questions_text)
-                
-                # Добавляем небольшую паузу между типами касаний
-                await asyncio.sleep(0.5)
-        
-        # Отправляем финальное сообщение
-        if any_content_found:
-            final_message = "Вот такой план на сегодня"
-            back_keyboard = await keyboard_ops.create_keyboard(
-                buttons={"Назад": "back_to_menu"},
-                interval=1
+                # Если на конкретный день нет — используем дефолт или любой активный
+                content = touch_repo.get_default(touch_type) or touch_repo.get_any_active(touch_type)
+
+            if not content:
+                logger.warning(
+                    "[DAY_STRATEGY] Контент не найден для touch_type=%s, day=%s",
+                    touch_type,
+                    course_day,
+                )
+                continue
+
+            any_content_sent = True
+
+            logger.info(
+                "[DAY_STRATEGY] Отправляем %s: id=%s, summary=%s, video_url=%s, video_file=%s",
+                touch_type,
+                content.id,
+                "есть" if content.summary else "нет",
+                "есть" if content.video_url else "нет",
+                getattr(content, "video_file_path", None),
             )
-            await callback.message.answer(final_message, reply_markup=back_keyboard)
-        else:
-            # Если контента нет, показываем сообщение об ошибке
-            logger.warning(f"[DAY_STRATEGY] Контент не найден для дня {test_course_day}")
+
+            # Заголовок касания (как в скрине «Касание ДЕНЬ»)
+            await callback.message.answer(header)
+            await asyncio.sleep(3)
+
+            # 1) summary используем как caption к видео, если оно есть
+            caption = content.summary.strip() if content.summary else None
+
+            # 2) видео / ссылка на видео
+            video_file_path = getattr(content, "video_file_path", None)
+            if video_file_path:
+                from aiogram.types import FSInputFile
+
+                file_path = media_base / video_file_path
+                logger.info(
+                    "[DAY_STRATEGY] Видео-файл для %s: %s (exists=%s)",
+                    touch_type,
+                    file_path,
+                    file_path.exists(),
+                )
+                if file_path.exists():
+                    try:
+                        await callback.message.answer_video(
+                            FSInputFile(file_path),
+                            caption=caption,
+                        )
+                    except Exception as send_err:  # noqa: BLE001
+                        logger.warning("Не удалось отправить видео-файл %s: %s", file_path, send_err)
+                        if content.video_url:
+                            await callback.message.answer(content.video_url.strip())
+                            if caption:
+                                await asyncio.sleep(3)
+                                await callback.message.answer(caption)
+                elif content.video_url:
+                    await callback.message.answer(content.video_url.strip())
+                    if caption:
+                        await asyncio.sleep(3)
+                        await callback.message.answer(caption)
+            elif content.video_url:
+                # Видео по ссылке + caption отдельным сообщением
+                await callback.message.answer(content.video_url.strip())
+                if caption:
+                    await asyncio.sleep(3)
+                    await callback.message.answer(caption)
+            else:
+                # Если видео нет совсем — просто отправляем описание
+                if caption:
+                    await callback.message.answer(caption)
+
+            # 3) вопросы (если есть): сначала короткое вступление, затем список вопросов
+            if content.questions:
+                await asyncio.sleep(3)
+                await callback.message.answer("Какие вопросы Вас сегодня ожидают.")
+                await asyncio.sleep(3)
+                await callback.message.answer(content.questions.strip())
+
+            # Пауза перед следующим типом касания
+            await asyncio.sleep(3)
+
+        if not any_content_sent:
+            # Если ничего вообще не нашли по всем типам касаний
+            logger.warning("[DAY_STRATEGY] Контент для стратегии дня не найден (morning/day/evening)")
             error_message = "Контент для стратегии дня временно недоступен. Пожалуйста, попробуйте позже."
             await callback.message.answer(error_message)
-            
-            # Показываем главное меню
+
             step_6_text = get_booking_text("step_6")
             await _send_keyboard_message(
                 callback,
@@ -394,8 +466,6 @@ async def callback_day_strategy(callback: CallbackQuery):
 
     finally:
         session.close()
-
-    await callback.answer()
 
 
 @router.callback_query(F.data == "know_better")
@@ -421,6 +491,14 @@ async def callback_understood_move_on(callback: CallbackQuery, state: FSMContext
 @router.callback_query(F.data == "continue_after_notification")
 async def callback_continue_after_notification(callback: CallbackQuery):
     """Экран с информацией об авторе."""
+    await callback.answer()
+    
+    # Удаляем сообщение с кнопками
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+    
     author_text = get_booking_text("author_info")
     await callback.message.answer(author_text)
 
@@ -431,7 +509,6 @@ async def callback_continue_after_notification(callback: CallbackQuery):
         COMPANY_BUTTONS,
         interval=1,
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data == "link_vk")
@@ -459,8 +536,11 @@ async def callback_watch_video(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "continue_after_video_intro")
-async def callback_continue_after_video_intro(callback: CallbackQuery):
+async def callback_continue_after_video_intro(callback: CallbackQuery, state: FSMContext):
     """Экран после введения в курс."""
+    # Сохраняем контекст, откуда пришли, чтобы можно было вернуться из оплаты
+    await state.update_data(payment_source_context="after_video")
+    
     await _send_keyboard_message(
         callback,
         get_booking_text("after_video"),
@@ -471,8 +551,39 @@ async def callback_continue_after_video_intro(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "payment")
-async def callback_payment(callback: CallbackQuery):
+async def callback_payment(callback: CallbackQuery, state: FSMContext):
     """Генерация ссылки на оплату через Robokassa."""
+    await callback.answer()
+    
+    # Удаляем сообщение с кнопками
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+    
+    # Сохраняем текущее состояние и данные для возможности вернуться назад
+    current_state = await state.get_state()
+    current_data = await state.get_data()
+    
+    # Сохраняем информацию о том, откуда пришли на оплату
+    # Проверяем, есть ли сохраненный контекст (устанавливается перед переходом на оплату)
+    payment_context = current_data.get("payment_source_context")
+    
+    # Если контекст еще не сохранен, определяем его на основе состояния
+    if not payment_context:
+        if current_state and "ProfileStates" in str(current_state):
+            payment_context = "subscription_choice"
+        else:
+            # По умолчанию считаем, что пришли из after_video
+            payment_context = "after_video"
+    
+    # Сохраняем полную информацию о предыдущем месте
+    await state.update_data(
+        payment_previous_state=str(current_state) if current_state else None,
+        payment_previous_data=current_data.copy() if current_data else {},
+        payment_context=payment_context
+    )
+    
     session = next(get_session())
     try:
         user_repo = UserRepository(session)
@@ -492,14 +603,16 @@ async def callback_payment(callback: CallbackQuery):
             description="Подписка на 4 недели курса",
         )
 
+        # Сначала отправляем сообщение о том, что ссылка готова
+        await callback.message.answer(get_booking_text("payment_created"))
+        
+        # Затем отправляем сообщение с предложением оплаты и кнопками
         buttons = {
             "Оплатить 5 990 ₽": ("url", payment.payment_url or ""),
-            "Главное меню": "back_to_menu",
+            "<- Назад": "payment_back",
         }
         keyboard = await keyboard_ops.create_keyboard(buttons=buttons, interval=1)
-
         await callback.message.answer(get_booking_text("payment_offer"), reply_markup=keyboard)
-        await callback.message.answer(get_booking_text("payment_created"))
     except Exception as exc:
         logger.exception("Не удалось создать ссылку на оплату: %s", exc)
         await callback.message.answer(get_booking_text("payment_error"))
@@ -507,6 +620,62 @@ async def callback_payment(callback: CallbackQuery):
         session.close()
 
     await callback.answer()
+
+
+@router.callback_query(F.data == "payment_back")
+async def callback_payment_back(callback: CallbackQuery, state: FSMContext):
+    """Возврат назад из оплаты к предыдущему экрану."""
+    data = await state.get_data()
+    previous_context = data.get("payment_context")
+    previous_state_str = data.get("payment_previous_state")
+    previous_data = data.get("payment_previous_data", {})
+    
+    await callback.answer()
+    
+    # Восстанавливаем данные в state (кроме временных данных об оплате)
+    if previous_data:
+        # Сохраняем контекст источника для будущего возврата
+        payment_source = previous_data.get("payment_source_context")
+        
+        # Восстанавливаем все данные кроме временных данных об оплате
+        for key, value in previous_data.items():
+            if key not in ["payment_context", "payment_previous_state", "payment_previous_data"]:
+                await state.update_data(**{key: value})
+        
+        # Восстанавливаем контекст источника
+        if payment_source:
+            await state.update_data(payment_source_context=payment_source)
+    
+    # Очищаем временные данные оплаты
+    await state.update_data(
+        payment_context=None,
+        payment_previous_state=None,
+        payment_previous_data=None
+    )
+    
+    # Возвращаемся на экран, откуда пришли
+    if previous_context == "subscription_choice":
+        # Показываем экран выбора подписки
+        subscription_text = get_booking_text("subscription_choice")
+        subscription_keyboard = await keyboard_ops.create_keyboard(
+            buttons={
+                "Бесплатная неделя": "free_week",
+                "Подписка на месяц": "monthly_subscription",
+            },
+            interval=2,
+        )
+        await callback.message.answer(subscription_text, reply_markup=subscription_keyboard)
+    elif previous_context == "after_video":
+        # Возвращаемся к экрану после видео
+        await _send_keyboard_message(
+            callback,
+            get_booking_text("after_video"),
+            PAYMENT_BUTTONS,
+            interval=2,
+        )
+    else:
+        # По умолчанию возвращаемся в меню подписки
+        await callback_my_subscription(callback)
 
 
 @router.callback_query(F.data == "notification_back_to_entry", NotificationSettingsStates.choosing_touch)
@@ -552,6 +721,14 @@ async def callback_notification_use_default(callback: CallbackQuery, state: FSMC
     finally:
         session.close()
 
+    await callback.answer()
+    
+    # Удаляем сообщение с кнопками
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+
     await state.clear()
     
     # Отправляем подтверждение
@@ -565,7 +742,6 @@ async def callback_notification_use_default(callback: CallbackQuery, state: FSMC
     
     keyboard = await keyboard_ops.create_keyboard(buttons=buttons, interval=1)
     await callback.message.answer(default_info_text, reply_markup=keyboard)
-    await callback.answer()
 
 
 async def _start_waiting_time(
@@ -646,6 +822,14 @@ async def callback_chat_placeholder(callback: CallbackQuery):
 @router.callback_query(F.data == "back_to_menu")
 async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
     """Возврат в главное меню и очистка состояния."""
+    await callback.answer()
+    
+    # Удаляем сообщение с кнопками
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+    
     await state.clear()
     await _send_keyboard_message(
         callback,
@@ -653,7 +837,6 @@ async def callback_back_to_menu(callback: CallbackQuery, state: FSMContext):
         MAIN_MENU_BUTTONS,
         interval=2,
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data == "saturday_reflection_start")
@@ -685,7 +868,15 @@ async def callback_saturday_reflection_start(callback: CallbackQuery, state: FSM
     )
     
     try:
-        await callback.message.answer(first_question)
+        # Добавляем кнопки "Написать" и "Назад"
+        saturday_keyboard = await keyboard_ops.create_keyboard(
+            buttons={
+                "Написать": "saturday_show_question_1",
+                "<- Назад": "back_to_menu",
+            },
+            interval=2,
+        )
+        await callback.message.answer(first_question, reply_markup=saturday_keyboard)
         await state.set_state(SaturdayReflectionStates.answering_segment_1)
         
         # Проверяем, что состояние установлено
@@ -763,7 +954,16 @@ async def _handle_saturday_confirmation(
             }
             next_state = next_states.get(segment)
             if next_state and next_question:
-                await callback.message.answer(next_question)
+                # Добавляем кнопки "Написать" и "Назад"
+                next_segment = segment + 1
+                saturday_keyboard = await keyboard_ops.create_keyboard(
+                    buttons={
+                        "Написать": f"saturday_show_question_{next_segment}",
+                        "<- Назад": "back_to_menu",
+                    },
+                    interval=2,
+                )
+                await callback.message.answer(next_question, reply_markup=saturday_keyboard)
                 await state.set_state(next_state)
         else:
             # Все сегменты пройдены - сохраняем все ответы в БД
@@ -804,7 +1004,15 @@ async def _handle_saturday_confirmation(
             4: SaturdayReflectionStates.answering_segment_4,
             5: SaturdayReflectionStates.answering_segment_5,
         }
-        await callback.message.answer("Хорошо, отправьте ваш ответ заново.")
+        # Добавляем кнопки "Написать" и "Назад"
+        saturday_keyboard = await keyboard_ops.create_keyboard(
+            buttons={
+                "Написать": f"saturday_show_question_{segment}",
+                "<- Назад": "back_to_menu",
+            },
+            interval=2,
+        )
+        await callback.message.answer("Хорошо, отправьте ваш ответ заново.", reply_markup=saturday_keyboard)
         await state.set_state(answering_states[segment])
 
 
@@ -820,5 +1028,70 @@ async def callback_saturday_edit(callback: CallbackQuery, state: FSMContext):
     """Обработчик кнопки 'Изменить' для редактирования ответа."""
     segment = int(callback.data.split("_")[-1])
     await _handle_saturday_confirmation(callback, state, segment, is_confirmed=False)
+
+
+@router.callback_query(F.data.startswith("saturday_show_question_"))
+async def callback_saturday_show_question(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Написать' - показывает вопрос текущего сегмента."""
+    await callback.answer()
+    
+    segment = int(callback.data.split("_")[-1])
+    
+    # Вопросы для каждого сегмента
+    questions = {
+        1: (
+            "1/5 Первый шаг — похвастаться 🌟\n"
+            "Какие победы случились у тебя на этой неделе в главных направлениях? Что удалось сделать, какие открытия или находки тебя поразили, что получилось особенно классно?\n\n"
+            "✍️ Напиши или наговори свой ответ. Мы сохраним его в твою карту личной стратегии"
+        ),
+        2: (
+            "Второй шаг — посмотреть на то, что не получилось.\n"
+            "Где ты застрял? В чём было ключевое противоречие недели? Какие ограничения встретились, что забирало энергию?\n"
+            "Важно не просто пожаловаться, а конструктивно разобрать, где были сложности.\n"
+            "✍️ Напиши или наговори свои наблюдения — мы добавим их в твою карту личной стратегии"
+        ),
+        3: (
+            "Третий шаг — поблагодарить 🙏\n"
+            "Вспомни, кто помог тебе на этой неделе. Чья поддержка была особенно ценной? Кому хочется сказать спасибо?\n"
+            "Для продвинутых: прямо сейчас можно взять телефон и отправить пару тёплых слов тем, о ком ты подумал. Благодарность — это практика, которая расширяет поле возможностей.\n"
+            "✍️ Запиши или напиши свой ответ — он тоже войдёт в твою стратегию"
+        ),
+        4: (
+            "Четвёртый шаг — помечтать ✨\n"
+            "Вернись к большим целям и намерениям, которые ставил(а) в начале. Подумай: что из опыта этой недели хочется добавить в них? Какие новые инсайты и наблюдения стоит приземлить в твою личную стратегию?\n"
+            "✍️ Поделись своими мыслями письменно или голосом"
+        ),
+        5: (
+            "И пятый шаг — пообещать 💪\n"
+            "Выбери один-два фокуса на следующую неделю. Это должны быть те самые «сдвиговые задачи», которые реально продвинут тебя к важным целям.\n"
+            "✍️ Напиши или наговори, что берёшь в фокус. Мы сохраним это в твоей карте стратегии как твой следующий шаг"
+        ),
+    }
+    
+    question = questions.get(segment)
+    if not question:
+        await callback.message.answer("Ошибка: не найден вопрос для этого сегмента.")
+        return
+    
+    # Определяем состояния для каждого сегмента
+    answering_states = {
+        1: SaturdayReflectionStates.answering_segment_1,
+        2: SaturdayReflectionStates.answering_segment_2,
+        3: SaturdayReflectionStates.answering_segment_3,
+        4: SaturdayReflectionStates.answering_segment_4,
+        5: SaturdayReflectionStates.answering_segment_5,
+    }
+    
+    # Добавляем кнопки "Написать" и "Назад"
+    saturday_keyboard = await keyboard_ops.create_keyboard(
+        buttons={
+            "Написать": f"saturday_show_question_{segment}",
+            "<- Назад": "back_to_menu",
+        },
+        interval=2,
+    )
+    
+    await callback.message.answer(question, reply_markup=saturday_keyboard)
+    await state.set_state(answering_states[segment])
 
 
