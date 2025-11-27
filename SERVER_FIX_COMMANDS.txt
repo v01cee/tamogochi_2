@@ -1,0 +1,84 @@
+=== РЕШЕНИЕ ПРОБЛЕМ НА СЕРВЕРЕ ===
+
+ШАГ 1: Решить проблему с git pull
+
+# Сохранить текущие изменения в core/config.py:
+git stash push core/config.py -m "Local config changes"
+
+# Удалить мешающий файл (или переместить его):
+rm admin_panel/media/touch_videos/sample_960x400_ocean_with_audio.mp4
+# ИЛИ переместить:
+# mv admin_panel/media/touch_videos/sample_960x400_ocean_with_audio.mp4 /tmp/
+
+# Теперь можно сделать pull:
+git pull
+
+# Если нужно вернуть изменения из stash:
+# git stash pop
+
+
+ШАГ 2: Узнать имя базы данных
+
+# Посмотреть .env файл:
+cat .env | grep POSTGRES_DB
+
+# Или если используете внешнюю БД, проверьте:
+cat .env | grep POSTGRES_HOST
+cat .env | grep POSTGRES_PORT
+cat .env | grep POSTGRES_USER
+
+
+ШАГ 3: Проверить текущее состояние миграций
+
+# Замените testing_postgres на ваше имя БД из шага 2:
+docker-compose exec -T postgres psql -U admin -d testing_postgres -c "SELECT version_num FROM alembic_version;"
+
+# Или если БД на внешнем хосте, подключитесь напрямую:
+# psql -h 109.73.202.83 -p 5435 -U admin -d testing_postgres -c "SELECT version_num FROM alembic_version;"
+
+
+ШАГ 4: Исправить версию миграций
+
+# Если в базе записано "0003", нужно заменить на полное имя "0003" (это уже правильно)
+# Но проблема в том, что alembic не может найти файл. Проверьте наличие файлов:
+
+docker-compose exec bot ls -la migrations/versions/
+
+# Должны быть файлы:
+# - 0001_initial.py
+# - 0002_add_day_evening_touch_sent_at.py  
+# - 0003_add_touch_answers_evening_reflections_ratings_saturday.py
+
+# Если файлов нет, после git pull они должны появиться.
+
+# Если файлы есть, попробуйте применить миграции:
+docker-compose exec bot alembic upgrade head
+
+# Если ошибка "Can't locate revision", проверьте что записано в базе:
+docker-compose exec -T postgres psql -U admin -d testing_postgres -c "SELECT * FROM alembic_version;"
+
+# Если там записано что-то не то (например, "0003" вместо полного имени),
+# исправьте вручную. Сначала узнайте правильное имя ревизии из файла:
+docker-compose exec bot grep -A 1 "^revision:" migrations/versions/0003_add_touch_answers_evening_reflections_ratings_saturday.py
+
+# Скорее всего там будет revision: str = "0003"
+# Значит в базе должно быть записано именно "0003"
+
+# Проверьте цепочку ревизий:
+docker-compose exec bot alembic history
+
+
+ШАГ 5: Если миграции все еще не работают
+
+# Очистить версию и применить заново (ОСТОРОЖНО! Только если уверены):
+docker-compose exec -T postgres psql -U admin -d testing_postgres -c "DELETE FROM alembic_version;"
+docker-compose exec bot alembic stamp base
+docker-compose exec bot alembic upgrade head
+
+
+ШАГ 6: Быстрое решение (если база пустая или можно пересоздать)
+
+# Если данных в базе нет или их можно потерять:
+docker-compose exec -T postgres psql -U admin -d testing_postgres -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+docker-compose exec bot alembic upgrade head
+
