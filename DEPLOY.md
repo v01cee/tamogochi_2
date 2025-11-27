@@ -231,10 +231,61 @@ docker-compose logs -f bot
 
 ### Ошибки миграций
 
-1. Проверьте подключение к БД в .env
-2. Убедитесь, что БД доступна:
+#### Миграции не применены или зависли
+
+**Проблема:** `alembic upgrade head` выполняется долго или не работает, миграции не применены.
+
+**Решение:**
+
+1. **Сначала проверьте состояние миграций:**
+```bash
+chmod +x check_migrations.sh
+./check_migrations.sh
+```
+
+2. **Исправьте и примените миграции автоматически:**
+```bash
+chmod +x fix_migrations.sh
+./fix_migrations.sh
+```
+
+3. **Или вручную (если скрипт не помог):**
+
+   a. Проверьте подключение к БД:
+   ```bash
+   docker-compose exec bot alembic current
+   ```
+
+   b. Если таблица `alembic_version` не существует, создайте её:
+   ```bash
+   docker-compose exec -T postgres psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-app_db} -c "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);"
+   ```
+
+   c. Если база данных пустая (нет таблиц), примените миграции:
+   ```bash
+   docker-compose exec bot alembic upgrade head
+   ```
+
+   d. Если таблицы уже есть, но версия не записана, отметьте текущую версию:
+   ```bash
+   docker-compose exec bot alembic stamp head
+   ```
+
+4. **Проверьте подключение к БД:**
 ```bash
 docker-compose exec bot python -c "from database.session import get_session; next(get_session())"
+```
+
+5. **Если миграции зависли, прервите и выполните вручную:**
+```bash
+# Остановите контейнер
+docker-compose stop bot
+
+# Примените миграции в отдельной сессии
+docker-compose run --rm bot alembic upgrade head
+
+# Запустите контейнер заново
+docker-compose up -d bot
 ```
 
 ### Django Admin не открывается

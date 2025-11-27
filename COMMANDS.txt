@@ -82,3 +82,44 @@ docker-compose up -d
 docker-compose exec bot alembic upgrade head
 docker-compose exec admin python admin_panel/manage.py migrate --noinput
 
+
+=== ЕСЛИ МИГРАЦИИ НЕ ПРИМЕНЕНЫ (быстрое решение) ===
+
+# 1. Автоматическое исправление (рекомендуется):
+chmod +x fix_migrations.sh
+./fix_migrations.sh
+
+# 2. ИЛИ ручное исправление:
+
+# 2.1. Проверить состояние:
+docker-compose exec bot alembic current
+
+# 2.2. Создать таблицу alembic_version (если её нет):
+docker-compose exec -T postgres psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-app_db} -c "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);"
+
+# 2.3. Применить миграции:
+docker-compose exec bot alembic upgrade head
+
+# 2.4. ИЛИ если таблицы уже есть, отметьте версию:
+docker-compose exec bot alembic stamp head
+
+# 2.5. Проверить результат:
+docker-compose exec bot alembic current
+
+
+=== ЕСЛИ КОМАНДА МИГРАЦИЙ ЗАВИСЛА ===
+
+# 1. Прервите команду (Ctrl+C)
+
+# 2. Проверьте подключение:
+docker-compose exec -T postgres psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-app_db} -c "SELECT 1;"
+
+# 3. Перезапустите контейнер:
+docker-compose restart bot
+
+# 4. Примените миграции в отдельной сессии:
+docker-compose run --rm bot alembic upgrade head
+
+# 5. Перезапустите контейнеры:
+docker-compose up -d
+
