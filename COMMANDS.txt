@@ -85,11 +85,7 @@ docker-compose exec admin python admin_panel/manage.py migrate --noinput
 
 === ЕСЛИ МИГРАЦИИ НЕ ПРИМЕНЕНЫ (быстрое решение) ===
 
-# 1. Автоматическое исправление (рекомендуется):
-chmod +x fix_migrations.sh
-./fix_migrations.sh
-
-# 2. ИЛИ ручное исправление:
+# Ручное исправление:
 
 # 2.1. Проверить состояние:
 docker-compose exec bot alembic current
