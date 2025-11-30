@@ -28,6 +28,20 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
+    # Сброс webhook перед запуском polling (если был установлен)
+    try:
+        webhook_info = await bot.get_webhook_info()
+        if webhook_info.url:
+            logger.info(f"Обнаружен активный webhook: {webhook_info.url}. Удаляем...")
+            await bot.delete_webhook(drop_pending_updates=True)
+            # Небольшая пауза, чтобы Telegram успел обработать запрос
+            await asyncio.sleep(1)
+            logger.info("Webhook успешно удален")
+        else:
+            logger.info("Webhook не установлен, продолжаем с polling")
+    except Exception as e:
+        logger.warning(f"Ошибка при проверке/удалении webhook: {e}. Продолжаем запуск...")
+
     # Инициализация FSM storage
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
@@ -36,12 +50,18 @@ async def main():
 
     scheduler = setup_scheduler(bot)
 
-    logger.info("Бот запущен")
+    logger.info("Бот запущен. Нажми Ctrl+C для остановки.")
     try:
         await dp.start_polling(bot)
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал остановки (Ctrl+C)")
+    except Exception as e:
+        logger.error(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
+        raise
     finally:
         scheduler.shutdown(wait=False)
         logger.info("Планировщик остановлен")
+        await bot.session.close()
 
 
 if __name__ == "__main__":

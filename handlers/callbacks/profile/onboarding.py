@@ -86,7 +86,8 @@ async def callback_username_confirm_yes(callback: CallbackQuery, state: FSMConte
             "СЕО": "role_ceo",
             "Middle-руководитель": "role_middle_manager",
             "Специалист": "role_specialist",
-            "Предприниматель": "role_other",
+            "Предприниматель": "role_entrepreneur",
+            "Другое": "role_other",
         },
         interval=2,
     )
@@ -109,6 +110,7 @@ async def callback_role_selected(callback: CallbackQuery, state: FSMContext):
             "top_manager": "Топ-менеджер",
             "middle_manager": "Middle-руководитель",
             "specialist": "Специалист",
+            "entrepreneur": "Предприниматель",
         }
         role = role_mapping.get(role_data, role_data)
         await state.update_data(role=role)

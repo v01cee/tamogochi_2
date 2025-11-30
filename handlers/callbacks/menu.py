@@ -41,6 +41,20 @@ keyboard_ops = KeyboardOperations()
 logger = logging.getLogger(__name__)
 
 
+async def safe_callback_answer(callback: CallbackQuery, text: str | None = None, show_alert: bool = False) -> None:
+    """Безопасный ответ на callback_query с обработкой устаревших запросов"""
+    try:
+        await callback.answer(text=text, show_alert=show_alert)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "too old" in error_msg or "timeout" in error_msg or "invalid" in error_msg:
+            # Запрос устарел - это нормально, просто логируем
+            logger.debug(f"Callback query устарел для пользователя {callback.from_user.id}: {e}")
+        else:
+            # Другая ошибка - логируем как предупреждение
+            logger.warning(f"Ошибка при ответе на callback query: {e}")
+
+
 @router.callback_query.middleware()
 async def log_callback_queries(handler, event: CallbackQuery, data: dict):
     """Middleware для логирования всех callback queries"""
@@ -124,9 +138,9 @@ async def _send_keyboard_message(
 @router.callback_query(F.data == "help")
 async def callback_help(callback: CallbackQuery):
     """Хендлер справочного сообщения."""
+    await safe_callback_answer(callback)
     text = get_booking_text("help")
     await callback.message.answer(text)
-    await callback.answer()
 
 
 @router.callback_query(F.data == "info")
@@ -532,12 +546,23 @@ async def callback_continue_after_company(callback: CallbackQuery):
 @router.callback_query(F.data == "watch_video")
 async def callback_watch_video(callback: CallbackQuery):
     """Заглушка для просмотра видео."""
+    # Удаляем сообщение с вводным текстом
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass  # Игнорируем ошибки, если сообщение уже удалено
     await callback.answer("Видео будет добавлено позже")
 
 
 @router.callback_query(F.data == "continue_after_video_intro")
 async def callback_continue_after_video_intro(callback: CallbackQuery, state: FSMContext):
     """Экран после введения в курс."""
+    # Удаляем сообщение с вводным текстом
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass  # Игнорируем ошибки, если сообщение уже удалено
+    
     # Сохраняем контекст, откуда пришли, чтобы можно было вернуться из оплаты
     await state.update_data(payment_source_context="after_video")
     
@@ -553,7 +578,7 @@ async def callback_continue_after_video_intro(callback: CallbackQuery, state: FS
 @router.callback_query(F.data == "payment")
 async def callback_payment(callback: CallbackQuery, state: FSMContext):
     """Генерация ссылки на оплату через Robokassa."""
-    await callback.answer()
+    await safe_callback_answer(callback)
     
     # Удаляем сообщение с кнопками
     try:
@@ -625,12 +650,13 @@ async def callback_payment(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "payment_back")
 async def callback_payment_back(callback: CallbackQuery, state: FSMContext):
     """Возврат назад из оплаты к предыдущему экрану."""
+    # Отвечаем на callback сразу, до долгих операций
+    await safe_callback_answer(callback)
+    
     data = await state.get_data()
     previous_context = data.get("payment_context")
     previous_state_str = data.get("payment_previous_state")
     previous_data = data.get("payment_previous_data", {})
-    
-    await callback.answer()
     
     # Восстанавливаем данные в state (кроме временных данных об оплате)
     if previous_data:

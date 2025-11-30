@@ -232,8 +232,8 @@ class TelegramUserAdmin(admin.ModelAdmin):
         if not result:
             return "—"
         return (
-            f"Э:{result.energy} Сч:{result.happiness} Сон:{result.sleep_quality} "
-            f"Отн:{result.relationships_quality} Бал:{result.life_balance} Стр:{result.strategy_level}"
+            f"Э: {result.energy}  Сч: {result.happiness}  Сон: {result.sleep_quality}  "
+            f"Отн: {result.relationships_quality}  Бал: {result.life_balance}  Стр: {result.strategy_level}"
         )
 
     latest_quiz_result.short_description = "Стартовый портрет"

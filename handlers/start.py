@@ -558,13 +558,15 @@ async def process_editing_name(message: Message, state: FSMContext):
     # Показываем данные для проверки
     data = await state.get_data()
     full_name = data.get("full_name", "%N%")
+    username = data.get("username", "%N%")
     role = data.get("role", "%N%")
     company = data.get("company", "%N%")
     
     review_text = get_booking_text("profile_data_review")
-    review_text = review_text.replace("%N%", full_name, 1)
-    review_text = review_text.replace("%N%", role, 1)
-    review_text = review_text.replace("%N%", company, 1)
+    review_text = review_text.replace("%N%", full_name, 1)  # Имя
+    review_text = review_text.replace("%N%", username, 1)  # Ник в Telegram
+    review_text = review_text.replace("%N%", role, 1)  # Должность
+    review_text = review_text.replace("%N%", company, 1)  # Компания
     
     review_buttons = {
         "Изменить данные": "edit_profile_personal_data",
@@ -589,13 +591,15 @@ async def process_editing_role(message: Message, state: FSMContext):
     # Показываем данные для проверки
     data = await state.get_data()
     full_name = data.get("full_name", "%N%")
+    username = data.get("username", "%N%")
     role = data.get("role", "%N%")
     company = data.get("company", "%N%")
     
     review_text = get_booking_text("profile_data_review")
-    review_text = review_text.replace("%N%", full_name, 1)
-    review_text = review_text.replace("%N%", role, 1)
-    review_text = review_text.replace("%N%", company, 1)
+    review_text = review_text.replace("%N%", full_name, 1)  # Имя
+    review_text = review_text.replace("%N%", username, 1)  # Ник в Telegram
+    review_text = review_text.replace("%N%", role, 1)  # Должность
+    review_text = review_text.replace("%N%", company, 1)  # Компания
     
     review_buttons = {
         "Изменить данные": "edit_profile_personal_data",
@@ -620,13 +624,15 @@ async def process_editing_company(message: Message, state: FSMContext):
     # Показываем данные для проверки
     data = await state.get_data()
     full_name = data.get("full_name", "%N%")
+    username = data.get("username", "%N%")
     role = data.get("role", "%N%")
     company = data.get("company", "%N%")
     
     review_text = get_booking_text("profile_data_review")
-    review_text = review_text.replace("%N%", full_name, 1)
-    review_text = review_text.replace("%N%", role, 1)
-    review_text = review_text.replace("%N%", company, 1)
+    review_text = review_text.replace("%N%", full_name, 1)  # Имя
+    review_text = review_text.replace("%N%", username, 1)  # Ник в Telegram
+    review_text = review_text.replace("%N%", role, 1)  # Должность
+    review_text = review_text.replace("%N%", company, 1)  # Компания
     
     review_buttons = {
         "Изменить данные": "edit_profile_personal_data",
@@ -673,14 +679,16 @@ async def process_company(message: Message, state: FSMContext):
     # Получаем все данные для проверки
     data = await state.get_data()
     full_name = data.get("full_name", "%N%")
+    username = data.get("username", "%N%")
     role = data.get("role", "%N%")
     company = data.get("company", "%N%")
     
     # Показываем данные для проверки
     review_text = get_booking_text("profile_data_review")
-    review_text = review_text.replace("%N%", full_name, 1)
-    review_text = review_text.replace("%N%", role, 1)
-    review_text = review_text.replace("%N%", company, 1)
+    review_text = review_text.replace("%N%", full_name, 1)  # Имя
+    review_text = review_text.replace("%N%", username, 1)  # Ник в Telegram
+    review_text = review_text.replace("%N%", role, 1)  # Должность
+    review_text = review_text.replace("%N%", company, 1)  # Компания
     
     review_buttons = {
         "Изменить данные": "edit_profile_personal_data",

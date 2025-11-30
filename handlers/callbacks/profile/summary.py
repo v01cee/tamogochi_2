@@ -68,16 +68,25 @@ async def callback_edit_goals(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "confirm_profile_data")
 async def callback_confirm_profile_data(callback: CallbackQuery, state: FSMContext):
     """Подтверждение блока с целями/вызовами и выбор подписки."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     data = await state.get_data()
     goals = data.get("goals", "%N%")
+    
+    logger.info(f"[PROFILE] confirm_profile_data: goals value = '{goals}', type = {type(goals)}")
 
     # Если целей еще нет, переходим к запросу целей
-    if goals == "%N%" or not goals:
+    # Проверяем, что goals не установлен или равен маркеру отсутствия
+    if not goals or goals == "%N%" or (isinstance(goals, str) and goals.strip() == ""):
+        logger.info("[PROFILE] Goals not set, requesting goals")
         goals_text = get_booking_text("goals_request")
         await callback.message.answer(goals_text)
         await state.set_state(ProfileStates.waiting_for_goals)
         await callback.answer()
         return
+    
+    logger.info("[PROFILE] Goals already set, proceeding to subscription choice")
 
     # Если цели уже есть, переходим к выбору подписки
     # Сохраняем контекст, откуда пришли, чтобы можно было вернуться из оплаты

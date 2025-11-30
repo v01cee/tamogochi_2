@@ -223,7 +223,7 @@ class EveningRating(models.Model):
         ordering = ("-rating_date", "-created_at")
 
     def __str__(self) -> str:
-        return f"{self.user} - {self.rating_date} (Э:{self.rating_energy} Сч:{self.rating_happiness} Пр:{self.rating_progress})"
+        return f"{self.user} - {self.rating_date} (Э: {self.rating_energy}  Сч: {self.rating_happiness}  Пр: {self.rating_progress})"
 
 
 class SaturdayReflection(models.Model):
