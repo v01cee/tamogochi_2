@@ -1,0 +1,101 @@
+"""Утилиты для работы с администраторами бота из БД."""
+
+from typing import List
+
+
+def get_admin_ids() -> List[int]:
+    """
+    Получить список ID администраторов из БД.
+    
+    Returns:
+        Список ID администраторов (может быть пустым).
+    """
+    try:
+        from asgiref.sync import sync_to_async
+        from admin_panel.dashboard.models import BotSettings
+        
+        # Синхронный вызов для получения настроек
+        settings = BotSettings.get_settings()
+        admin_ids_str = settings.telegram_admin_ids
+        
+        if not admin_ids_str or not admin_ids_str.strip():
+            return []
+        
+        # Парсим строку вида "123,456,789" или "123 456 789"
+        ids = []
+        for part in admin_ids_str.replace(",", " ").split():
+            part = part.strip()
+            if part:
+                try:
+                    ids.append(int(part))
+                except ValueError:
+                    continue
+        
+        return ids
+    except Exception:
+        # Если ошибка при получении из БД, возвращаем пустой список
+        return []
+
+
+async def get_admin_ids_async() -> List[int]:
+    """
+    Асинхронная версия получения списка ID администраторов из БД.
+    
+    Returns:
+        Список ID администраторов (может быть пустым).
+    """
+    try:
+        from asgiref.sync import sync_to_async
+        from admin_panel.dashboard.models import BotSettings
+        
+        # Асинхронный вызов для получения настроек
+        get_settings = sync_to_async(BotSettings.get_settings)
+        settings = await get_settings()
+        admin_ids_str = settings.telegram_admin_ids
+        
+        if not admin_ids_str or not admin_ids_str.strip():
+            return []
+        
+        # Парсим строку вида "123,456,789" или "123 456 789"
+        ids = []
+        for part in admin_ids_str.replace(",", " ").split():
+            part = part.strip()
+            if part:
+                try:
+                    ids.append(int(part))
+                except ValueError:
+                    continue
+        
+        return ids
+    except Exception:
+        # Если ошибка при получении из БД, возвращаем пустой список
+        return []
+
+
+def is_admin(telegram_id: int) -> bool:
+    """
+    Проверить, является ли пользователь администратором.
+    
+    Args:
+        telegram_id: Telegram ID пользователя.
+        
+    Returns:
+        True, если пользователь является администратором.
+    """
+    admin_ids = get_admin_ids()
+    return telegram_id in admin_ids
+
+
+async def is_admin_async(telegram_id: int) -> bool:
+    """
+    Асинхронная версия проверки, является ли пользователь администратором.
+    
+    Args:
+        telegram_id: Telegram ID пользователя.
+        
+    Returns:
+        True, если пользователь является администратором.
+    """
+    admin_ids = await get_admin_ids_async()
+    return telegram_id in admin_ids
+

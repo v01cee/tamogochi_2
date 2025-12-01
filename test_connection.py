@@ -14,7 +14,9 @@ def test_config():
     print(f"Redis Host: {settings.redis_host}")
     print(f"Redis Port: {settings.redis_port}")
     print(f"Bot Token: {'*' * 10 if settings.bot_token else 'НЕ УСТАНОВЛЕН'}")
-    print(f"Admin IDs: {settings.telegram_admin_ids}")
+    from core.admin_utils import get_admin_ids
+admin_ids = get_admin_ids()
+print(f"Admin IDs: {admin_ids}")
     print()
 
 def test_db_connection():

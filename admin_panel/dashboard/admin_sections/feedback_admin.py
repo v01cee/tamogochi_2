@@ -16,6 +16,13 @@ class BotSettingsAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Администраторы бота",
+            {
+                "fields": ("telegram_admin_ids",),
+                "description": "ID администраторов Telegram через запятую (например: 123456789,987654321). Получить свой ID можно через бота @userinfobot.",
+            },
+        ),
+        (
             "Служебное",
             {
                 "fields": ("created_at", "updated_at"),

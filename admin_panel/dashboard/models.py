@@ -278,6 +278,12 @@ class BotSettings(models.Model):
         blank=True,
         null=True,
     )
+    telegram_admin_ids = models.TextField(
+        "ID администраторов Telegram",
+        help_text="ID администраторов бота через запятую (например: 123456789,987654321). Получить свой ID можно через бота @userinfobot.",
+        blank=True,
+        null=True,
+    )
     created_at = models.DateTimeField("Создан", auto_now_add=True, editable=False)
     updated_at = models.DateTimeField("Обновлён", auto_now=True, editable=False)
 

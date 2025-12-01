@@ -33,7 +33,6 @@ class Settings(BaseSettings):
 
     # Telegram Bot
     bot_token: str
-    telegram_admin_ids: list[int]
 
     # Django
     secret_key: str = ""
