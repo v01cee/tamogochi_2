@@ -23,10 +23,17 @@ def ensure_django_setup():
         except (AttributeError, RuntimeError):
             pass  # Проверим снова
     
-    # Добавляем корневую директорию проекта в sys.path, если её там нет
+    # Добавляем пути в sys.path для Django
     project_root = Path(__file__).parent.parent.resolve()
+    admin_panel_dir = project_root / "admin_panel"
+    
+    # Добавляем корневую директорию проекта (чтобы найти admin_panel)
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
+    
+    # Добавляем директорию admin_panel (чтобы Django мог найти приложения dashboard, payments)
+    if str(admin_panel_dir) not in sys.path:
+        sys.path.insert(0, str(admin_panel_dir))
     
     if not os.environ.get("DJANGO_SETTINGS_MODULE"):
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_panel.admin_panel.settings")
