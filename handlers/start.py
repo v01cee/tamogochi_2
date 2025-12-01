@@ -144,6 +144,11 @@ async def cmd_help(message: Message):
 async def process_feedback(message: Message, state: FSMContext):
     """Обработчик текстовых сообщений для обратной связи - пересылает в группу"""
     from asgiref.sync import sync_to_async
+    from core.admin_utils import ensure_django_setup
+    
+    # Настраиваем Django перед импортом модели
+    ensure_django_setup()
+    
     from admin_panel.dashboard.models import BotSettings
 
     feedback_text = message.text or (message.caption if message.caption else "")

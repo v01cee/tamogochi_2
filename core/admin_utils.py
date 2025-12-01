@@ -1,6 +1,17 @@
 """Утилиты для работы с администраторами бота из БД."""
 
+import os
 from typing import List
+
+
+def ensure_django_setup():
+    """Настраивает Django перед импортом моделей."""
+    if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_panel.settings")
+    
+    import django
+    if not django.apps.apps.ready:
+        django.setup()
 
 
 def get_admin_ids() -> List[int]:
@@ -11,7 +22,7 @@ def get_admin_ids() -> List[int]:
         Список ID администраторов (может быть пустым).
     """
     try:
-        from asgiref.sync import sync_to_async
+        ensure_django_setup()
         from admin_panel.dashboard.models import BotSettings
         
         # Синхронный вызов для получения настроек
@@ -45,6 +56,7 @@ async def get_admin_ids_async() -> List[int]:
         Список ID администраторов (может быть пустым).
     """
     try:
+        ensure_django_setup()
         from asgiref.sync import sync_to_async
         from admin_panel.dashboard.models import BotSettings
         
