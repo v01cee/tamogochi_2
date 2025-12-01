@@ -150,9 +150,17 @@ async def process_feedback(message: Message, state: FSMContext):
     if feedback_text:
         try:
             # Получаем ID группы для обратной связи из .env
-            feedback_group_id = settings.feedback_group_id
+            feedback_group_id_str = settings.feedback_group_id
 
-            if feedback_group_id:
+            if feedback_group_id_str:
+                # Конвертируем строку в int (Telegram API ожидает int для chat_id)
+                try:
+                    feedback_group_id = int(feedback_group_id_str)
+                except (ValueError, TypeError):
+                    logger.error(f"[FEEDBACK] Неверный формат feedback_group_id: {feedback_group_id_str}")
+                    await message.answer("❌ Ошибка конфигурации. Обратитесь к администратору.")
+                    await state.clear()
+                    return
                 # Формируем информацию о пользователе
                 full_name_parts = [message.from_user.first_name or "", message.from_user.last_name or ""]
                 full_name = " ".join(p for p in full_name_parts if p).strip() or "Не указано"
