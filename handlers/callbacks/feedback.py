@@ -54,7 +54,13 @@ async def callback_write_to_us(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "write_to_us_from_feedback")
 async def callback_write_to_us_from_feedback(callback: CallbackQuery, state: FSMContext):
     """Запрос сообщения после выбора 'Написать нам' на экране обратной связи."""
+    text = get_booking_text("write_to_us_request")
+    back_keyboard = await keyboard_ops.create_keyboard(
+        buttons={"<- Назад": "back_to_menu"},
+        interval=1,
+    )
+    await callback.message.answer(text, reply_markup=back_keyboard)
     await state.set_state(FeedbackStates.waiting_for_feedback)
-    await callback.answer("Ожидаю ваше сообщение...")
+    await callback.answer()
 
 
