@@ -269,6 +269,28 @@ class SaturdayReflection(models.Model):
     segments_completed.short_description = "Заполнено сегментов"
 
 
+class Feedback(models.Model):
+    """Сообщения обратной связи от пользователей."""
+
+    telegram_id = models.BigIntegerField("Telegram ID", db_index=True)
+    username = models.CharField("Никнейм", max_length=255, blank=True, null=True)
+    full_name = models.CharField("ФИО", max_length=255, blank=True, null=True)
+    message_text = models.TextField("Текст сообщения")
+    created_at = models.DateTimeField("Создан")
+    updated_at = models.DateTimeField("Обновлён")
+    is_active = models.BooleanField("Активен", default=True)
+
+    class Meta:
+        managed = False
+        db_table = "feedbacks"
+        verbose_name = "Обратная связь"
+        verbose_name_plural = "Обратная связь"
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"{self.telegram_id} - {self.created_at:%d.%m.%Y %H:%M}"
+
+
 class UnifiedStatistics(models.Model):
     """Прокси-модель для единой страницы статистики."""
     

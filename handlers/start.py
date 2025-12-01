@@ -14,6 +14,7 @@ from core.texts import get_booking_text
 from core.keyboards import KeyboardOperations
 from core.states import FeedbackStates, ProfileStates, NotificationSettingsStates, TouchQuestionStates, SaturdayReflectionStates
 from database.session import get_session
+from models.feedback import Feedback
 from repositories.user_repository import UserRepository
 from repositories.touch_answer_repository import TouchAnswerRepository
 from repositories.touch_content_repository import TouchContentRepository
@@ -112,12 +113,33 @@ async def cmd_help(message: Message):
 @router.message(FeedbackStates.waiting_for_feedback)
 async def process_feedback(message: Message, state: FSMContext):
     """Обработчик текстовых сообщений для обратной связи"""
-    # Здесь можно сохранить обратную связь в базу данных
-    feedback_text = message.text
-    
+    # Сохраняем обратную связь в базу данных
+    feedback_text = message.text or (message.caption if message.caption else "")
+
+    if feedback_text:
+        session_gen = get_session()
+        session = next(session_gen)
+        try:
+            full_name_parts = [message.from_user.first_name or "", message.from_user.last_name or ""]
+            full_name = " ".join(p for p in full_name_parts if p).strip() or None
+
+            feedback = Feedback(
+                telegram_id=message.from_user.id,
+                username=message.from_user.username,
+                full_name=full_name,
+                message_text=feedback_text,
+                source="feedback",
+            )
+            session.add(feedback)
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[FEEDBACK] Не удалось сохранить обратную связь: {exc}")
+        finally:
+            session.close()
+
     # Очищаем состояние
     await state.clear()
-    
+
     # Отправляем сообщение благодарности с клавиатурой главного меню
     feedback_thanks_text = get_booking_text("feedback_thanks")
     step_6_text = get_booking_text("step_6")
@@ -126,7 +148,7 @@ async def process_feedback(message: Message, state: FSMContext):
         "О боте": "about_bot",
         "Стратегия дня": "day_strategy",
         "Настройка бота": "bot_settings",
-        "Моя подписка": "my_subscription"
+        "Моя подписка": "my_subscription",
     }
     menu_keyboard = await keyboard_ops.create_keyboard(buttons=menu_buttons, interval=2)
     
