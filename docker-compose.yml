@@ -76,9 +76,9 @@ services:
       - .:/app
     ports:
       - "8042:8042"
-    depends_on:
-      # Раскомментируйте, если используете локальный PostgreSQL:
-      # - postgres
+    # Раскомментируйте, если используете локальный PostgreSQL:
+    # depends_on:
+    #   - postgres
     command: sh -c "./wait-for-db.sh ${POSTGRES_HOST:-postgres} 'pip install -q django-storages boto3 2>/dev/null || true; python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py collectstatic --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042'"
 
 volumes:
