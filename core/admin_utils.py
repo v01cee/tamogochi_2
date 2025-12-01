@@ -1,6 +1,8 @@
 """Утилиты для работы с администраторами бота из БД."""
 
 import os
+import sys
+from pathlib import Path
 from typing import List
 
 # Флаг для отслеживания инициализации Django
@@ -21,8 +23,13 @@ def ensure_django_setup():
         except (AttributeError, RuntimeError):
             pass  # Проверим снова
     
+    # Добавляем корневую директорию проекта в sys.path, если её там нет
+    project_root = Path(__file__).parent.parent.resolve()
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    
     if not os.environ.get("DJANGO_SETTINGS_MODULE"):
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_panel.settings")
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_panel.admin_panel.settings")
     
     import django
     
