@@ -14,7 +14,6 @@ from core.texts import get_booking_text
 from core.keyboards import KeyboardOperations
 from core.states import FeedbackStates, ProfileStates, NotificationSettingsStates, TouchQuestionStates, SaturdayReflectionStates
 from database.session import get_session
-from models.feedback import Feedback
 from repositories.user_repository import UserRepository
 from repositories.touch_answer_repository import TouchAnswerRepository
 from repositories.touch_content_repository import TouchContentRepository
@@ -25,6 +24,37 @@ from whisper_client import transcribe_audio
 router = Router()
 keyboard_ops = KeyboardOperations()
 logger = logging.getLogger(__name__)
+
+
+@router.message(Command("get_group_id"))
+async def cmd_get_group_id(message: Message):
+    """Команда для получения ID группы/канала."""
+    chat = message.chat
+    
+    # Проверяем, что это группа или канал
+    if chat.type in ("group", "supergroup", "channel"):
+        chat_id = chat.id
+        chat_title = chat.title or "Без названия"
+        chat_type = {
+            "group": "Группа",
+            "supergroup": "Супергруппа",
+            "channel": "Канал",
+        }.get(chat.type, "Чат")
+        
+        response = (
+            f"📋 <b>Информация о чате:</b>\n\n"
+            f"🏷️ <b>Тип:</b> {chat_type}\n"
+            f"📝 <b>Название:</b> {chat_title}\n"
+            f"🆔 <b>ID чата:</b> <code>{chat_id}</code>\n\n"
+            f"💡 <i>Скопируйте ID и вставьте в админке в поле 'ID группы для обратной связи'</i>"
+        )
+        
+        await message.answer(response, parse_mode="HTML")
+    else:
+        await message.answer(
+            "❌ Эта команда работает только в группах и каналах.\n"
+            "Добавьте бота в группу/канал и выполните команду там."
+        )
 
 
 @router.message(Command("start"))
@@ -112,30 +142,76 @@ async def cmd_help(message: Message):
 
 @router.message(FeedbackStates.waiting_for_feedback)
 async def process_feedback(message: Message, state: FSMContext):
-    """Обработчик текстовых сообщений для обратной связи"""
-    # Сохраняем обратную связь в базу данных
+    """Обработчик текстовых сообщений для обратной связи - пересылает в группу"""
+    from asgiref.sync import sync_to_async
+    from admin_panel.dashboard.models import BotSettings
+
     feedback_text = message.text or (message.caption if message.caption else "")
 
     if feedback_text:
-        session_gen = get_session()
-        session = next(session_gen)
         try:
-            full_name_parts = [message.from_user.first_name or "", message.from_user.last_name or ""]
-            full_name = " ".join(p for p in full_name_parts if p).strip() or None
+            # Получаем настройки из Django модели
+            settings = await sync_to_async(BotSettings.get_settings)()
+            feedback_group_id = settings.feedback_group_id
 
-            feedback = Feedback(
-                telegram_id=message.from_user.id,
-                username=message.from_user.username,
-                full_name=full_name,
-                message_text=feedback_text,
-                source="feedback",
-            )
-            session.add(feedback)
-            session.commit()
+            if feedback_group_id:
+                # Формируем информацию о пользователе
+                full_name_parts = [message.from_user.first_name or "", message.from_user.last_name or ""]
+                full_name = " ".join(p for p in full_name_parts if p).strip() or "Не указано"
+                username = f"@{message.from_user.username}" if message.from_user.username else "Не указан"
+                
+                # Формируем сообщение для пересылки
+                forward_text = (
+                    f"📩 <b>Обратная связь</b>\n\n"
+                    f"👤 <b>Пользователь:</b> {full_name}\n"
+                    f"🆔 <b>Username:</b> {username}\n"
+                    f"🆔 <b>Telegram ID:</b> {message.from_user.id}\n\n"
+                    f"💬 <b>Сообщение:</b>\n{feedback_text}"
+                )
+
+                # Пересылаем сообщение в группу
+                try:
+                    if message.photo:
+                        # Если есть фото, пересылаем с текстом
+                        await message.bot.send_photo(
+                            chat_id=feedback_group_id,
+                            photo=message.photo[-1].file_id,
+                            caption=forward_text,
+                            parse_mode="HTML"
+                        )
+                    elif message.video:
+                        await message.bot.send_video(
+                            chat_id=feedback_group_id,
+                            video=message.video.file_id,
+                            caption=forward_text,
+                            parse_mode="HTML"
+                        )
+                    elif message.document:
+                        await message.bot.send_document(
+                            chat_id=feedback_group_id,
+                            document=message.document.file_id,
+                            caption=forward_text,
+                            parse_mode="HTML"
+                        )
+                    else:
+                        # Обычное текстовое сообщение
+                        await message.bot.send_message(
+                            chat_id=feedback_group_id,
+                            text=forward_text,
+                            parse_mode="HTML"
+                        )
+                    
+                    await message.answer("✅ Ваше сообщение отправлено администратору. Спасибо за обратную связь!")
+                    logger.info(f"[FEEDBACK] Сообщение от {message.from_user.id} переслано в группу {feedback_group_id}")
+                except Exception as send_exc:  # noqa: BLE001
+                    logger.error(f"[FEEDBACK] Ошибка при пересылке в группу: {send_exc}")
+                    await message.answer("❌ Произошла ошибка при отправке сообщения. Попробуйте позже.")
+            else:
+                logger.warning("[FEEDBACK] feedback_group_id не настроен в админке")
+                await message.answer("❌ Группа для обратной связи не настроена. Обратитесь к администратору.")
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"[FEEDBACK] Не удалось сохранить обратную связь: {exc}")
-        finally:
-            session.close()
+            logger.error(f"[FEEDBACK] Ошибка при обработке обратной связи: {exc}")
+            await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
     # Очищаем состояние
     await state.clear()

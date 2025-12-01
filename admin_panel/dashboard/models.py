@@ -269,19 +269,62 @@ class SaturdayReflection(models.Model):
     segments_completed.short_description = "Заполнено сегментов"
 
 
-class Feedback(models.Model):
-    """Сообщения обратной связи от пользователей."""
+class BotSettings(models.Model):
+    """Настройки бота (singleton - только одна запись)."""
 
-    telegram_id = models.BigIntegerField("Telegram ID", db_index=True)
-    username = models.CharField("Никнейм", max_length=255, blank=True, null=True)
-    full_name = models.CharField("ФИО", max_length=255, blank=True, null=True)
-    message_text = models.TextField("Текст сообщения")
-    created_at = models.DateTimeField("Создан")
-    updated_at = models.DateTimeField("Обновлён")
-    is_active = models.BooleanField("Активен", default=True)
+    feedback_group_id = models.BigIntegerField(
+        "ID группы для обратной связи",
+        help_text="ID группы/канала в Telegram (может быть отрицательным, например: -5034565380). Получить можно командой /get_group_id в группе.",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField("Создан", auto_now_add=True, editable=False)
+    updated_at = models.DateTimeField("Обновлён", auto_now=True, editable=False)
 
     class Meta:
-        managed = False
+        managed = True
+        db_table = "bot_settings"
+        verbose_name = "Настройки бота"
+        verbose_name_plural = "Настройки бота"
+
+    def __str__(self) -> str:
+        return "Настройки бота"
+
+    def save(self, *args, **kwargs):
+        """Обеспечиваем, что всегда только одна запись."""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        """Получить настройки (создать, если не существует)."""
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class CourseLaunch(models.Model):
+    """Запуск процесса курса - отслеживание запусков рассылки касаний."""
+
+    launch_date = models.DateTimeField(
+        "Дата запуска процесса",
+        help_text="Дата следующего понедельника, с которого начнется рассылка касаний",
+    )
+    started_at = models.DateTimeField("Процесс запущен", auto_now_add=True)
+    started_by = models.CharField("Запустил", max_length=255, blank=True, null=True)
+    users_count = models.IntegerField("Количество пользователей", default=0)
+    is_active = models.BooleanField("Активен", default=True, help_text="Только один активный запуск может быть")
+    created_at = models.DateTimeField("Создан", auto_now_add=True, editable=False)
+    updated_at = models.DateTimeField("Обновлён", auto_now=True, editable=False)
+
+    class Meta:
+        managed = True
+        db_table = "course_launches"
+        verbose_name = "Запуск курса"
+        verbose_name_plural = "Запуски курса"
+        ordering = ("-started_at",)
+
+    def __str__(self) -> str:
+        return f"Запуск от {self.started_at:%d.%m.%Y %H:%M} → старт курса {self.launch_date:%d.%m.%Y}"
         db_table = "feedbacks"
         verbose_name = "Обратная связь"
         verbose_name_plural = "Обратная связь"

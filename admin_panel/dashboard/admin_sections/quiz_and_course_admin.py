@@ -61,12 +61,15 @@ class TouchContentInline(admin.StackedInline):
     fields = (
         "touch_type",
         "title",
+        "summary",
         "is_active",
         "video_file",
         "video_url",
         "transcript",
         "questions",
     )
+    verbose_name = "Касание"
+    verbose_name_plural = "Касания (Утро/День/Вечер)"
 
 
 @admin.register(CourseDay)

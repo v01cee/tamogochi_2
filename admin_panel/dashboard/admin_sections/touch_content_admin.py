@@ -28,14 +28,15 @@ from ..models import TouchContent
 class TouchContentAdmin(admin.ModelAdmin):
     list_display = (
         "course_day",
-        "title",
         "touch_type",
+        "title",
         "is_active",
         "updated_at",
     )
     list_filter = ("touch_type", "is_active", "course_day")
-    search_fields = ("title", "questions")
+    search_fields = ("title", "questions", "course_day__title")
     ordering = ("course_day__day_number", "touch_type", "-updated_at")
+    list_editable = ("is_active",)
     readonly_fields = ("title", "created_at", "updated_at", "order_index")
     autocomplete_fields = ("course_day",)
     actions = ["send_touch_to_all_users"]
@@ -179,8 +180,8 @@ class TouchContentAdmin(admin.ModelAdmin):
 
             await asyncio.sleep(5)
             keyboard_builder = InlineKeyboardBuilder()
-            if settings.community_chat_url:
-                keyboard_builder.button(text="Перейти в чат", url=settings.community_chat_url)
+            if core_settings.community_chat_url:
+                keyboard_builder.button(text="Перейти в чат", url=core_settings.community_chat_url)
             else:
                 keyboard_builder.button(text="Перейти в чат", callback_data="chat_placeholder")
             keyboard_builder.button(text="В меню «Стратегия дня»", callback_data="day_strategy")

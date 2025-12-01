@@ -1,22 +1,35 @@
 from django.contrib import admin
 
-from ..models import Feedback
+from ..models import BotSettings
 
 
-@admin.register(Feedback)
-class FeedbackAdmin(admin.ModelAdmin):
-    """Раздел 'Обратная связь' в админке."""
+@admin.register(BotSettings)
+class BotSettingsAdmin(admin.ModelAdmin):
+    """Раздел 'Обратная связь' в админке - настройки для пересылки сообщений в группу."""
 
-    list_display = ("created_at", "telegram_id", "username", "full_name", "short_text", "is_active")
-    list_filter = ("is_active",)
-    search_fields = ("telegram_id", "username", "full_name", "message_text")
-    readonly_fields = ("telegram_id", "username", "full_name", "message_text", "created_at", "updated_at", "is_active")
-    ordering = ("-created_at",)
-
-    def short_text(self, obj: Feedback) -> str:  # type: ignore[override]
-        text = obj.message_text or ""
-        return text[:80] + ("..." if len(text) > 80 else "")
-
-    short_text.short_description = "Текст"
+    fieldsets = (
+        (
+            "Настройки обратной связи",
+            {
+                "fields": ("feedback_group_id",),
+                "description": "Укажите ID группы/канала в Telegram, куда будут пересылаться сообщения обратной связи от пользователей. ID может быть отрицательным числом (например, -5034565380). Получить ID можно командой /get_group_id в группе или через бота @userinfobot/@getidsbot.",
+            },
+        ),
+        (
+            "Служебное",
+            {
+                "fields": ("created_at", "updated_at"),
+            },
+        ),
+    )
+    readonly_fields = ("created_at", "updated_at")
+    
+    def has_add_permission(self, request):
+        """Запрещаем создание новых записей - только одна запись."""
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        """Запрещаем удаление - настройки должны существовать."""
+        return False
 
 

@@ -13,3 +13,4 @@ from .admin_sections import touch_content_admin  # noqa: F401
 from .admin_sections import statistics_admin  # noqa: F401
 from .admin_sections import unified_statistics_admin  # noqa: F401
 from .admin_sections import feedback_admin  # noqa: F401
+from .admin_sections import course_launch_admin  # noqa: F401
