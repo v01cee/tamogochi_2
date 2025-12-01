@@ -143,20 +143,13 @@ async def cmd_help(message: Message):
 @router.message(FeedbackStates.waiting_for_feedback)
 async def process_feedback(message: Message, state: FSMContext):
     """Обработчик текстовых сообщений для обратной связи - пересылает в группу"""
-    from asgiref.sync import sync_to_async
-    from core.admin_utils import ensure_django_setup
-    
-    # Настраиваем Django перед импортом модели
-    ensure_django_setup()
-    
-    from admin_panel.dashboard.models import BotSettings
+    from core.config import settings
 
     feedback_text = message.text or (message.caption if message.caption else "")
 
     if feedback_text:
         try:
-            # Получаем настройки из Django модели
-            settings = await sync_to_async(BotSettings.get_settings)()
+            # Получаем ID группы для обратной связи из .env
             feedback_group_id = settings.feedback_group_id
 
             if feedback_group_id:

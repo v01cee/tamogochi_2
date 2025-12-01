@@ -56,6 +56,9 @@ class Settings(BaseSettings):
 
     # Community
     community_chat_url: str | None = None
+    
+    # Feedback
+    feedback_group_id: str | None = None
 
     # Cloud.ru API (Whisper)
     cloudru_iam_key: str
