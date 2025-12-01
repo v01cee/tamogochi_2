@@ -1,24 +1,23 @@
 version: '3.3'
 
 services:
-  postgres:
-    image: postgres:16
-    container_name: app_postgres
-    env_file:
-      - .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-app_db}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      # Используем дефолтного пользователя postgres для проверки готовности
-      # pg_isready проверяет только готовность сервера, не требует реального подключения
-      test: ["CMD-SHELL", "pg_isready -U postgres || pg_isready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # Локальный PostgreSQL - закомментирован, так как используется внешняя БД
+  # postgres:
+  #   image: postgres:16
+  #   container_name: app_postgres
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  #     POSTGRES_DB: ${POSTGRES_DB:-app_db}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres || pg_isready"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   redis:
     image: redis:7-alpine
@@ -82,7 +81,7 @@ services:
     command: sh -c "./wait-for-db.sh ${POSTGRES_HOST:-postgres} 'pip install -q django-storages boto3 2>/dev/null || true; python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py collectstatic --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042'"
 
 volumes:
-  postgres_data:
+  # postgres_data:  # Не используется, так как БД внешняя
   redis_data:
 
 

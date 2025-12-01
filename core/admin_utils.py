@@ -3,15 +3,45 @@
 import os
 from typing import List
 
+# Флаг для отслеживания инициализации Django
+_django_setup_done = False
+
 
 def ensure_django_setup():
     """Настраивает Django перед импортом моделей."""
+    global _django_setup_done
+    
+    if _django_setup_done:
+        # Проверяем, что Django действительно настроен
+        try:
+            import django
+            if hasattr(django, 'apps') and hasattr(django.apps, 'apps'):
+                if django.apps.apps.ready:
+                    return  # Django настроен
+        except (AttributeError, RuntimeError):
+            pass  # Проверим снова
+    
     if not os.environ.get("DJANGO_SETTINGS_MODULE"):
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_panel.settings")
     
     import django
-    if not django.apps.apps.ready:
+    
+    # Настраиваем Django
+    try:
         django.setup()
+        _django_setup_done = True
+    except RuntimeError:
+        # Django может выбросить RuntimeError если уже настроен
+        # Проверяем, действительно ли настроен
+        try:
+            if hasattr(django, 'apps') and hasattr(django.apps, 'apps'):
+                if django.apps.apps.ready:
+                    _django_setup_done = True
+                    return
+        except (AttributeError, RuntimeError):
+            pass
+        # Если не настроен, пробрасываем ошибку
+        raise
 
 
 def get_admin_ids() -> List[int]:
