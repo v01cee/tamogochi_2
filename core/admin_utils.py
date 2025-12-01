@@ -23,20 +23,26 @@ def ensure_django_setup():
         except (AttributeError, RuntimeError):
             pass  # Проверим снова
     
-    # Добавляем пути в sys.path для Django
+    # Добавляем корневую директорию проекта в sys.path для Django
     project_root = Path(__file__).parent.parent.resolve()
-    admin_panel_dir = project_root / "admin_panel"
     
-    # Добавляем корневую директорию проекта (чтобы найти admin_panel)
+    # Добавляем корневую директорию проекта ПЕРВОЙ (чтобы найти admin_panel.admin_panel.settings)
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     
-    # Добавляем директорию admin_panel (чтобы Django мог найти приложения dashboard, payments)
-    if str(admin_panel_dir) not in sys.path:
-        sys.path.insert(0, str(admin_panel_dir))
-    
     if not os.environ.get("DJANGO_SETTINGS_MODULE"):
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_panel.admin_panel.settings")
+    
+    # Импортируем django.conf.settings ДО django.setup(), чтобы проверить, сможет ли Django загрузить настройки
+    import django.conf
+    
+    # После установки DJANGO_SETTINGS_MODULE добавляем admin_panel в sys.path
+    # Это нужно для того, чтобы INSTALLED_APPS с 'dashboard' и 'payments' работал
+    # Добавляем ПОСЛЕ корневой директории, чтобы admin_panel.admin_panel.settings имел приоритет
+    admin_panel_dir = project_root / "admin_panel"
+    if str(admin_panel_dir) not in sys.path:
+        # Вставляем на позицию 1 (после project_root), чтобы не перекрыть импорт admin_panel.admin_panel
+        sys.path.insert(1, str(admin_panel_dir))
     
     import django
     
