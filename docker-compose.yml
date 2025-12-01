@@ -61,9 +61,7 @@ services:
     depends_on:
       # Раскомментируйте, если используете локальные контейнеры:
       # - postgres
-      # - redis
-      redis:
-        condition: service_healthy
+      - redis
     command: sh -c "./wait-for-db.sh ${POSTGRES_HOST:-postgres} 'pip install -q limited-aiogram==1.0.0 2>/dev/null || true; (alembic current 2>/dev/null | grep -q \"0003\" || alembic upgrade head 2>&1 | grep -v \"auth_permission\" || true); python bot.py'"
 
   admin:
@@ -80,8 +78,7 @@ services:
       - "8042:8042"
     depends_on:
       # Раскомментируйте, если используете локальный PostgreSQL:
-      # postgres:
-      #   condition: service_healthy
+      # - postgres
     command: sh -c "./wait-for-db.sh ${POSTGRES_HOST:-postgres} 'pip install -q django-storages boto3 2>/dev/null || true; python admin_panel/manage.py migrate --noinput && python admin_panel/manage.py collectstatic --noinput && python admin_panel/manage.py runserver 0.0.0.0:8042'"
 
 volumes:
