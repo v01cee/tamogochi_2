@@ -151,13 +151,13 @@ async def callback_touch_questions_continue(callback: CallbackQuery, state: FSMC
     
     try:
         import redis
-        # from core.config import settings
+        from core.config import settings
         
         redis_client = redis.Redis(
             host=settings.redis_host,
-            port=6700,
-            password="An0th3rStr0ngR3disP@ss",
-            db=0,
+            port=settings.redis_port,
+            password=settings.redis_password,
+            db=settings.redis_db,
             decode_responses=True
         )
         
