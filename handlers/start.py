@@ -18,6 +18,7 @@ from repositories.user_repository import UserRepository
 from repositories.touch_answer_repository import TouchAnswerRepository
 from repositories.touch_content_repository import TouchContentRepository
 from repositories.evening_reflection_repository import EveningReflectionRepository
+from repositories.saturday_reflection_repository import SaturdayReflectionRepository
 from qwen_client import generate_qwen_response
 from whisper_client import transcribe_audio
 
@@ -106,7 +107,8 @@ async def cmd_start(message: Message):
         # Отправляем второе сообщение курса
         step_1_text = get_booking_text("step_1")
         if step_1_text:
-            await message.answer(step_1_text)
+            from aiogram.types import LinkPreviewOptions
+            await message.answer(step_1_text, link_preview_options=LinkPreviewOptions(is_disabled=True))
             logger.info(f"[START] Отправлено второе сообщение для пользователя {message.from_user.id}")
             # Небольшая задержка между сообщениями
             await asyncio.sleep(0.5)
@@ -146,6 +148,16 @@ async def process_feedback(message: Message, state: FSMContext):
     from core.config import settings
 
     feedback_text = message.text or (message.caption if message.caption else "")
+
+    # Если нет ни текста, ни подписи — не принимаем такие сообщения как обратную связь
+    # (стикеры, голоса без подписи и т.п.) и не выходим из состояния.
+    if not feedback_text:
+        await message.answer(
+            "Пока можно отправить только текстовое сообщение "
+            "или медиа (фото/видео/файл) с подписью.\n"
+            "Пожалуйста, напишите ваш вопрос или отзыв текстом."
+        )
+        return
 
     if feedback_text:
         try:
@@ -1802,7 +1814,7 @@ async def _process_saturday_reflection_answer(
     next_state: SaturdayReflectionStates | None,
     next_question: str
 ) -> None:
-    """Обработать ответ на сегмент рефлексии стратсубботы."""
+    """Обработать ответ на сегмент рефлексии стратсубботы - просто сохранить и перейти дальше."""
     logger.info(f"[SATURDAY] _process_saturday_reflection_answer вызван для сегмента {current_segment}")
     processing_msg = None
     
@@ -1815,7 +1827,7 @@ async def _process_saturday_reflection_answer(
             file = await message.bot.get_file(message.voice.file_id)
             audio_data = BytesIO()
             await message.bot.download_file(file.file_path, destination=audio_data)
-            raw_text = await transcribe_audio(audio_data)
+            answer_text = await transcribe_audio(audio_data)
             
             if processing_msg:
                 try:
@@ -1823,65 +1835,81 @@ async def _process_saturday_reflection_answer(
                 except:
                     pass
         elif message.text:
-            raw_text = message.text.strip()
+            answer_text = message.text.strip()
         else:
             await message.answer("Пожалуйста, отправьте текстовое сообщение.")
             return
         
-        if not raw_text or not raw_text.strip():
+        if not answer_text or not answer_text.strip():
             await message.answer("Пожалуйста, отправьте текстовое сообщение.")
             return
         
-        # Отправляем в Qwen для обработки
-        processing_msg = await message.answer("🔄 Обрабатываю ваш ответ...")
+        # Сохраняем ответ в state
+        data = await state.get_data()
+        answers = data.get("saturday_answers", {})
+        answers[f"segment_{current_segment}"] = answer_text.strip()
+        await state.update_data(saturday_answers=answers)
         
-        qwen_prompt = (
-            f"Исходный текст пользователя:\n{raw_text}\n\n"
-            "Исправь орфографию и пунктуацию, скомпонуй текст так, чтобы он был читаемым и структурированным. "
-            "ВАЖНО: НЕ добавляй ничего от себя, НЕ интерпретируй, НЕ додумывай. "
-            "Верни ТОЛЬКО исправленный и скомпонованный текст того, что сказал пользователь. "
-            "Сохрани смысл и содержание, но улучши форму."
-        )
-        
-        processed_text = await generate_qwen_response(qwen_prompt)
-        
-        if processing_msg:
+        # Сохраняем в БД
+        try:
+            session = next(get_session())
             try:
-                await processing_msg.delete()
-            except:
-                pass
+                user_repo = UserRepository(session)
+                user = user_repo.get_by_telegram_id(message.from_user.id)
+                
+                if user:
+                    reflection_repo = SaturdayReflectionRepository(session)
+                    reflection_date = date.today()
+                    
+                    # Сохраняем текущий сегмент
+                    kwargs = {f"segment_{current_segment}": answer_text.strip()}
+                    reflection_repo.create_or_update(
+                        user_id=user.id,
+                        reflection_date=reflection_date,
+                        **kwargs
+                    )
+                    logger.info(f"[SATURDAY] Сохранен сегмент {current_segment} для пользователя {user.id}")
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"[SATURDAY] Ошибка при сохранении в БД: {e}", exc_info=True)
         
-        if not processed_text or not processed_text.strip():
-            processed_text = raw_text  # Используем исходный текст, если Qwen не ответил
-        
-        # Сохраняем обработанный текст во временное хранилище для подтверждения
-        await state.update_data(
-            temp_processed_text=processed_text.strip(),
-            temp_current_segment=current_segment,
-            temp_next_question=next_question
-        )
-        
-        # Показываем обработанный текст для подтверждения
-        confirmation_text = f"📝 Вот как мы обработали ваш ответ:\n\n{processed_text.strip()}\n\nВсё верно?"
-        
-        # Создаем клавиатуру с кнопками подтверждения
-        keyboard_builder = InlineKeyboardBuilder()
-        keyboard_builder.button(text="✅ Все верно", callback_data=f"saturday_confirm_{current_segment}")
-        keyboard_builder.button(text="✏️ Изменить", callback_data=f"saturday_edit_{current_segment}")
-        keyboard_builder.adjust(2)
-        keyboard = keyboard_builder.as_markup()
-        
-        # Определяем состояние подтверждения
-        confirmation_states = {
-            1: SaturdayReflectionStates.confirming_segment_1,
-            2: SaturdayReflectionStates.confirming_segment_2,
-            3: SaturdayReflectionStates.confirming_segment_3,
-            4: SaturdayReflectionStates.confirming_segment_4,
-            5: SaturdayReflectionStates.confirming_segment_5,
-        }
-        
-        await message.answer(confirmation_text, reply_markup=keyboard)
-        await state.set_state(confirmation_states[current_segment])
+        # Если это не последний сегмент, отправляем следующий вопрос
+        if current_segment < 5 and next_state and next_question:
+            await message.answer("✅ Спасибо! Ваш ответ сохранён.")
+            await asyncio.sleep(1)
+            await message.answer(next_question)
+            await state.set_state(next_state)
+        else:
+            # Все сегменты пройдены - сохраняем все ответы в БД
+            try:
+                session = next(get_session())
+                try:
+                    user_repo = UserRepository(session)
+                    user = user_repo.get_by_telegram_id(message.from_user.id)
+                    
+                    if user:
+                        reflection_repo = SaturdayReflectionRepository(session)
+                        reflection_date = date.today()
+                        
+                        # Сохраняем все ответы
+                        reflection_repo.create_or_update(
+                            user_id=user.id,
+                            reflection_date=reflection_date,
+                            segment_1=answers.get("segment_1"),
+                            segment_2=answers.get("segment_2"),
+                            segment_3=answers.get("segment_3"),
+                            segment_4=answers.get("segment_4"),
+                            segment_5=answers.get("segment_5"),
+                        )
+                        logger.info(f"[SATURDAY] Сохранена полная рефлексия для пользователя {user.id}")
+                finally:
+                    session.close()
+            except Exception as e:
+                logger.error(f"[SATURDAY] Ошибка при сохранении полной рефлексии в БД: {e}", exc_info=True)
+            
+            await message.answer("🎉 Отлично! Вы завершили рефлексию стратсубботы. Все ваши ответы сохранены в карту личной стратегии.")
+            await state.clear()
             
     except TimeoutError:
         if processing_msg:

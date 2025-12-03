@@ -434,18 +434,21 @@ async def callback_day_strategy(callback: CallbackQuery):
                     except Exception as send_err:  # noqa: BLE001
                         logger.warning("Не удалось отправить видео-файл %s: %s", file_path, send_err)
                         if content.video_url:
-                            await callback.message.answer(content.video_url.strip())
+                            from aiogram.types import LinkPreviewOptions
+                            await callback.message.answer(content.video_url.strip(), link_preview_options=LinkPreviewOptions(is_disabled=True))
                             if caption:
                                 await asyncio.sleep(3)
                                 await callback.message.answer(caption)
                 elif content.video_url:
-                    await callback.message.answer(content.video_url.strip())
+                    from aiogram.types import LinkPreviewOptions
+                    await callback.message.answer(content.video_url.strip(), link_preview_options=LinkPreviewOptions(is_disabled=True))
                     if caption:
                         await asyncio.sleep(3)
                         await callback.message.answer(caption)
             elif content.video_url:
                 # Видео по ссылке + caption отдельным сообщением
-                await callback.message.answer(content.video_url.strip())
+                from aiogram.types import LinkPreviewOptions
+                await callback.message.answer(content.video_url.strip(), link_preview_options=LinkPreviewOptions(is_disabled=True))
                 if caption:
                     await asyncio.sleep(3)
                     await callback.message.answer(caption)
@@ -894,15 +897,8 @@ async def callback_saturday_reflection_start(callback: CallbackQuery, state: FSM
     )
     
     try:
-        # Добавляем кнопки "Написать" и "Назад"
-        saturday_keyboard = await keyboard_ops.create_keyboard(
-            buttons={
-                "Написать": "saturday_show_question_1",
-                "<- Назад": "back_to_menu",
-            },
-            interval=2,
-        )
-        await callback.message.answer(first_question, reply_markup=saturday_keyboard)
+        # Отправляем вопрос без кнопок - просто ждём ответа
+        await callback.message.answer(first_question)
         await state.set_state(SaturdayReflectionStates.answering_segment_1)
         
         # Проверяем, что состояние установлено
@@ -980,16 +976,8 @@ async def _handle_saturday_confirmation(
             }
             next_state = next_states.get(segment)
             if next_state and next_question:
-                # Добавляем кнопки "Написать" и "Назад"
-                next_segment = segment + 1
-                saturday_keyboard = await keyboard_ops.create_keyboard(
-                    buttons={
-                        "Написать": f"saturday_show_question_{next_segment}",
-                        "<- Назад": "back_to_menu",
-                    },
-                    interval=2,
-                )
-                await callback.message.answer(next_question, reply_markup=saturday_keyboard)
+                # Отправляем следующий вопрос без кнопок - просто ждём ответа
+                await callback.message.answer(next_question)
                 await state.set_state(next_state)
         else:
             # Все сегменты пройдены - сохраняем все ответы в БД
@@ -1030,15 +1018,8 @@ async def _handle_saturday_confirmation(
             4: SaturdayReflectionStates.answering_segment_4,
             5: SaturdayReflectionStates.answering_segment_5,
         }
-        # Добавляем кнопки "Написать" и "Назад"
-        saturday_keyboard = await keyboard_ops.create_keyboard(
-            buttons={
-                "Написать": f"saturday_show_question_{segment}",
-                "<- Назад": "back_to_menu",
-            },
-            interval=2,
-        )
-        await callback.message.answer("Хорошо, отправьте ваш ответ заново.", reply_markup=saturday_keyboard)
+        # Отправляем сообщение без кнопок - просто ждём ответа
+        await callback.message.answer("Хорошо, отправьте ваш ответ заново.")
         await state.set_state(answering_states[segment])
 
 
@@ -1098,7 +1079,7 @@ async def callback_saturday_show_question(callback: CallbackQuery, state: FSMCon
     if not question:
         await callback.message.answer("Ошибка: не найден вопрос для этого сегмента.")
         return
-    
+
     # Определяем состояния для каждого сегмента
     answering_states = {
         1: SaturdayReflectionStates.answering_segment_1,
@@ -1107,17 +1088,17 @@ async def callback_saturday_show_question(callback: CallbackQuery, state: FSMCon
         4: SaturdayReflectionStates.answering_segment_4,
         5: SaturdayReflectionStates.answering_segment_5,
     }
-    
-    # Добавляем кнопки "Написать" и "Назад"
-    saturday_keyboard = await keyboard_ops.create_keyboard(
-        buttons={
-            "Написать": f"saturday_show_question_{segment}",
-            "<- Назад": "back_to_menu",
-        },
-        interval=2,
+
+    # При нажатии "Написать" убираем старое сообщение с кнопками (если получится)
+    # и просто показываем вопрос + инструкцию без дополнительных кнопок.
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    await callback.message.answer(
+        question + "\n\n✍️ Отправь ответ текстом или голосовым сообщением."
     )
-    
-    await callback.message.answer(question, reply_markup=saturday_keyboard)
     await state.set_state(answering_states[segment])
 
 

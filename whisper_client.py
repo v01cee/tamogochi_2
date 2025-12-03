@@ -324,8 +324,18 @@ async def transcribe_via_direct_http(audio_data: bytes, audio_format: str = "ogg
         logger.info(f"Оптимизируем аудио (исходный размер: {len(audio_data)} байт)...")
         optimized_audio = optimize_audio(audio_data, input_format=audio_format)
         
-        # Согласно документации OpenAI, Whisper использует endpoint /v1/audio/transcriptions
-        transcription_url = f"{MODEL_URL.rstrip('/')}/v1/audio/transcriptions"
+        # Пробуем разные варианты endpoint для Cloud.ru
+        # Вариант 1: стандартный OpenAI endpoint
+        # Вариант 2: прямой endpoint модели (без /v1/audio/transcriptions)
+        # Вариант 3: endpoint /predict или /inference
+        possible_endpoints = [
+            f"{MODEL_URL.rstrip('/')}/v1/audio/transcriptions",  # OpenAI формат
+            f"{MODEL_URL.rstrip('/')}/predict",  # Cloud.ru формат
+            f"{MODEL_URL.rstrip('/')}/inference",  # Альтернативный формат
+            MODEL_URL.rstrip('/'),  # Прямой базовый URL
+        ]
+        
+        transcription_url = possible_endpoints[0]  # Начинаем с первого варианта
         
         # Определяем формат и MIME type для оптимизированного аудио
         if PYDUB_AVAILABLE and optimized_audio != audio_data:
@@ -347,60 +357,92 @@ async def transcribe_via_direct_http(audio_data: bytes, audio_format: str = "ogg
             'response_format': 'json'
         }
         
-        # Получаем заголовки авторизации с Bearer токеном
-        auth_headers = await get_auth_headers(transcription_url, 'POST')
-        
-        # Отправляем запрос с правильными заголовками
-        logger.info(f"Отправляем запрос к {transcription_url}")
-        logger.debug(f"Заголовки: {auth_headers}")
-        logger.info("Внимание: Whisper может долго обрабатывать аудио (до 5-10 минут), это нормально")
-        
-        # Пробуем несколько раз с ретраями (serverless модель может долго стартовать после 5 минут простоя)
-        # Для serverless моделей увеличиваем количество попыток, так как машина может отключаться
-        max_retries = 5  # Увеличено до 5 попыток (всего 6) для serverless режима
-        retry_delay = 10  # Задержка между попытками (секунды)
-        timeout_retry_delay = 20  # Большая задержка после таймаута (модель может стартовать)
-        timeout = 600  # 10 минут - покрываем общее время обработки (Whisper + Qwen)
-        
+        # Пробуем разные endpoint'ы, если один не работает
         response = None
-        last_exception = None
-        for attempt in range(max_retries + 1):
-            try:
-                if attempt > 0:
-                    # После таймаута делаем большую задержку, так как модель может стартовать
-                    delay = timeout_retry_delay if isinstance(last_exception, requests.exceptions.Timeout) else retry_delay
-                    logger.info(f"Повторная попытка {attempt}/{max_retries} через {delay} секунд...")
-                    time.sleep(delay)
-                
-                response = requests.post(
-                    transcription_url,
-                    files=files,
-                    data=data,
-                    headers=auth_headers,
-                    timeout=timeout
-                )
-                break  # Успешно, выходим из цикла
-                
-            except requests.exceptions.Timeout:
-                last_exception = requests.exceptions.Timeout()
-                if attempt < max_retries:
-                    logger.warning(f"Таймаут при запросе к Whisper API (попытка {attempt + 1}/{max_retries + 1}). "
-                                 f"Serverless модель может стартовать после простоя. Повторяем через {timeout_retry_delay} секунд...")
-                    continue
-                else:
-                    logger.error(f"Таймаут при запросе к Whisper API после {max_retries + 1} попыток. "
-                               f"Модель не отвечает за {timeout}s.")
-                    raise
-            except Exception as e:
-                last_exception = e
-                logger.error(f"Ошибка при запросе к Whisper API: {e}")
-                if attempt < max_retries:
-                    logger.info(f"Повторяем попытку через {retry_delay} секунд...")
-                    continue
-                else:
-                    raise
+        last_error = None
         
-        logger.info(f"Получен ответ со статусом {response.status_code}")
+        for endpoint_idx, transcription_url in enumerate(possible_endpoints):
+            try:
+                # Получаем заголовки авторизации с Bearer токеном
+                auth_headers = await get_auth_headers(transcription_url, 'POST')
+                
+                # Отправляем запрос с правильными заголовками
+                logger.info(f"Пробуем endpoint {endpoint_idx + 1}/{len(possible_endpoints)}: {transcription_url}")
+                logger.debug(f"Заголовки: {auth_headers}")
+                logger.info("Внимание: Whisper может долго обрабатывать аудио (до 5-10 минут), это нормально")
+                
+                # Пробуем несколько раз с ретраями (serverless модель может долго стартовать после 5 минут простоя)
+                max_retries = 2  # Меньше попыток для каждого endpoint, так как пробуем несколько
+                retry_delay = 5
+                timeout_retry_delay = 10
+                timeout = 600  # 10 минут
+                
+                last_exception = None
+                for attempt in range(max_retries + 1):
+                    try:
+                        if attempt > 0:
+                            delay = timeout_retry_delay if isinstance(last_exception, requests.exceptions.Timeout) else retry_delay
+                            logger.info(f"Повторная попытка {attempt}/{max_retries} через {delay} секунд...")
+                            time.sleep(delay)
+                        
+                        response = requests.post(
+                            transcription_url,
+                            files=files,
+                            data=data,
+                            headers=auth_headers,
+                            timeout=timeout
+                        )
+                        
+                        # Если получили успешный ответ или ошибку не 404, выходим из цикла endpoint'ов
+                        if response.status_code == 200:
+                            break
+                        elif response.status_code != 404:
+                            # Если это не 404, значит endpoint правильный, но есть другая ошибка
+                            break
+                        else:
+                            # 404 - пробуем следующий endpoint
+                            logger.warning(f"Endpoint {transcription_url} вернул 404, пробуем следующий...")
+                            response = None
+                            break
+                            
+                    except requests.exceptions.Timeout:
+                        last_exception = requests.exceptions.Timeout()
+                        if attempt < max_retries:
+                            logger.warning(f"Таймаут при запросе к Whisper API (попытка {attempt + 1}/{max_retries + 1})...")
+                            continue
+                        else:
+                            # Таймаут - возможно endpoint правильный, но модель долго стартует
+                            # Пробуем следующий endpoint
+                            logger.warning(f"Таймаут на endpoint {transcription_url}, пробуем следующий...")
+                            break
+                    except Exception as e:
+                        last_exception = e
+                        logger.warning(f"Ошибка при запросе к {transcription_url}: {e}")
+                        if attempt < max_retries:
+                            continue
+                        else:
+                            # Ошибка - пробуем следующий endpoint
+                            break
+                
+                # Если получили успешный ответ, выходим из цикла по endpoint'ам
+                if response and response.status_code == 200:
+                    break
+                elif response and response.status_code != 404:
+                    # Если это не 404, значит endpoint правильный, но есть другая ошибка - не пробуем дальше
+                    break
+                    
+            except Exception as e:
+                logger.warning(f"Ошибка при попытке использовать endpoint {transcription_url}: {e}")
+                last_error = e
+                continue
+        
+        if not response:
+            if last_error:
+                raise last_error
+            else:
+                raise ValueError("Не удалось получить ответ ни от одного endpoint. Проверьте URL модели и доступность сервиса.")
+        
+        logger.info(f"Получен ответ со статусом {response.status_code} от {transcription_url}")
         
         if response.status_code == 200:
             try:

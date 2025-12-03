@@ -172,14 +172,16 @@ async def _send_evening_content(bot: Bot, telegram_id: int, content: TouchConten
             logger.warning("Файл видео касания не найден: %s", file_path)
             # Если файл не найден, пробуем URL
             if content.video_url:
-                await bot.send_message(telegram_id, content.video_url)
+                from aiogram.types import LinkPreviewOptions
+                await bot.send_message(telegram_id, content.video_url, link_preview_options=LinkPreviewOptions(is_disabled=True))
                 if caption:
                     await bot.send_message(telegram_id, caption)
                 return
     
     # Если есть video_url, но нет файла
     if content.video_url:
-        await bot.send_message(telegram_id, content.video_url)
+        from aiogram.types import LinkPreviewOptions
+        await bot.send_message(telegram_id, content.video_url, link_preview_options=LinkPreviewOptions(is_disabled=True))
         if caption:
             await bot.send_message(telegram_id, caption)
         return

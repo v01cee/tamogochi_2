@@ -144,7 +144,14 @@ class TelegramUserAdmin(admin.ModelAdmin):
         "notification_intro_seen",
     )
     ordering = ("-created_at",)
-    actions = ["delete_selected", "send_morning_touch_test", "send_day_touch_test", "send_evening_touch_test", "send_saturday_touch_test"]
+    actions = [
+        "delete_selected",
+        "grant_30_day_subscription",
+        "send_morning_touch_test",
+        "send_day_touch_test",
+        "send_evening_touch_test",
+        "send_saturday_touch_test",
+    ]
     readonly_fields = (
         "telegram_id",
         "username",
@@ -254,6 +261,62 @@ class TelegramUserAdmin(admin.ModelAdmin):
         return True
 
     # --------------------------------------------------------------------- actions
+
+    def grant_30_day_subscription(self, request, queryset):
+        """
+        Выдать подписку на 30 дней (4 недели) выбранным пользователям.
+
+        Обновляем реальные записи в таблице users через SQLAlchemy-модель User:
+        - subscription_type = "monthly"
+        - subscription_paid_at = сейчас
+        - если subscription_started_at пустой — ставим сейчас
+        - сбрасываем флаги отправки касаний, чтобы бот начал касания заново
+        """
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from database.session import SessionLocal
+        from models.user import User
+        from sqlalchemy import select
+
+        tz = ZoneInfo(core_settings.timezone or "Europe/Moscow")
+        now = datetime.now(tz=tz)
+
+        telegram_ids = list(queryset.values_list("telegram_id", flat=True))
+        if not telegram_ids:
+            self.message_user(
+                request,
+                "Не выбрано ни одного пользователя",
+                messages.WARNING,
+            )
+            return
+
+        updated_count = 0
+        with SessionLocal() as session:
+            stmt = select(User).where(User.telegram_id.in_(telegram_ids))
+            users = session.execute(stmt).scalars().all()
+            for user in users:
+                user.subscription_type = "monthly"
+                user.subscription_paid_at = now
+                if user.subscription_started_at is None:
+                    user.subscription_started_at = now
+
+                user.morning_touch_sent_at = None
+                user.day_touch_sent_at = None
+                user.evening_touch_sent_at = None
+
+                updated_count += 1
+
+            session.commit()
+
+        self.message_user(
+            request,
+            f"Подписка на 30 дней выдана {updated_count} пользователям(ю).",
+            messages.SUCCESS,
+        )
+
+    grant_30_day_subscription.short_description = "🎟 Выдать подписку на 30 дней (monthly)"
+
     def _fetch_users(self, queryset):
         from database.session import SessionLocal
         from models.user import User
@@ -350,7 +413,8 @@ class TelegramUserAdmin(admin.ModelAdmin):
                             keyboard = _build_day_keyboard()
                             await bot.send_message(telegram_id, TEXTS["day_touch_prompt"], reply_markup=keyboard)
                             if content.video_url:
-                                await bot.send_message(telegram_id, content.video_url)
+                                from aiogram.types import LinkPreviewOptions
+                                await bot.send_message(telegram_id, content.video_url, link_preview_options=LinkPreviewOptions(is_disabled=True))
                             sent_count += 1
                         except Exception as exc:  # pylint: disable=broad-except
                             logger = logging.getLogger(__name__)

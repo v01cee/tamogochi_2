@@ -68,25 +68,41 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "admin_panel.wsgi.application"
 
-# Жёстко прописанный ключ и DEBUG по твоему запросу
-SECRET_KEY = "django-insecure-temporary-key-for-debugging-only"
+# Используем настройки из core.config или переменные окружения
+SECRET_KEY = core_settings.secret_key if core_settings else os.getenv("SECRET_KEY", "django-insecure-change-me-in-production")
 
-DEBUG = True
+DEBUG = core_settings.debug if core_settings else os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
-# Настройки базы данных (жёстко прописанные)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "testing_postgres",
-        "USER": "admin",
-        "PASSWORD": "123b1h23b1kgasfbasfas123",
-        "HOST": "109.73.202.83",
-        "PORT": 5435,
-        "OPTIONS": {
-            "options": "-c statement_timeout=30000",
+# Настройки базы данных из переменных окружения
+if core_settings:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": core_settings.postgres_db,
+            "USER": core_settings.postgres_user,
+            "PASSWORD": core_settings.postgres_password,
+            "HOST": core_settings.postgres_host,
+            "PORT": core_settings.postgres_port,
+            "OPTIONS": {
+                "options": "-c statement_timeout=30000",
+            },
         },
-    },
-}
+    }
+else:
+    # Fallback к переменным окружения напрямую
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "app_db"),
+            "USER": os.getenv("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres"),
+            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
+            "PORT": int(os.getenv("POSTGRES_PORT", "5432")),
+            "OPTIONS": {
+                "options": "-c statement_timeout=30000",
+            },
+        },
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -212,12 +228,19 @@ JAZZMIN_UI_TWEAKS = {
 }
 
 
-# AWS S3 настройки (жёстко, как было)
-AWS_S3_ENDPOINT_URL = ""
-AWS_STORAGE_BUCKET_NAME = ""
-AWS_ACCESS_KEY_ID = ""
-AWS_SECRET_ACCESS_KEY = ""
-AWS_QUERYSTRING_AUTH = True
+# AWS S3 настройки из переменных окружения
+if core_settings:
+    AWS_S3_ENDPOINT_URL = core_settings.aws_s3_endpoint_url or os.getenv("AWS_S3_ENDPOINT_URL", "")
+    AWS_STORAGE_BUCKET_NAME = core_settings.aws_storage_bucket_name or os.getenv("AWS_STORAGE_BUCKET_NAME", "")
+    AWS_ACCESS_KEY_ID = core_settings.aws_access_key_id or os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY = core_settings.aws_secret_access_key or os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    AWS_QUERYSTRING_AUTH = core_settings.aws_querystring_auth if core_settings else True
+else:
+    AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL", "")
+    AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "")
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    AWS_QUERYSTRING_AUTH = os.getenv("AWS_QUERYSTRING_AUTH", "True").lower() in ("true", "1", "yes")
 
 # Используем S3 только если настроен bucket_name, иначе локальное хранилище
 if AWS_STORAGE_BUCKET_NAME:

@@ -190,7 +190,8 @@ class TouchContentAdmin(admin.ModelAdmin):
 
             video_url = touch_content.video_url.strip()
             logger.info(f"[ADMIN] Отправляем ссылку на видео для day_touch с кнопками: {video_url}")
-            await bot.send_message(telegram_id, video_url, reply_markup=keyboard)
+            from aiogram.types import LinkPreviewOptions
+            await bot.send_message(telegram_id, video_url, reply_markup=keyboard, link_preview_options=LinkPreviewOptions(is_disabled=True))
             logger.info("[ADMIN] Ссылка на видео для day_touch с кнопками успешно отправлена")
         else:
             logger.warning("[ADMIN] Нет ссылки на видео (video_url) для day_touch")

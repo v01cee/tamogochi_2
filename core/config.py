@@ -17,22 +17,22 @@ class Settings(BaseSettings):
 
     # Database
     database_url: Optional[str] = None
-    postgres_host: str
-    postgres_port: int
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
+    postgres_host: str = ""
+    postgres_port: int = 5432
+    postgres_user: str = ""
+    postgres_password: str = ""
+    postgres_db: str = ""
     db_schema_name: str = "public"
 
     # Redis
     redis_url: Optional[str] = None
-    redis_host: str
-    redis_port: int
+    redis_host: str = ""
+    redis_port: int = 6379
     redis_password: Optional[str] = None
     redis_db: int = 0
 
     # Telegram Bot
-    bot_token: str
+    bot_token: str = ""
 
     # Django
     secret_key: str = ""
@@ -61,18 +61,18 @@ class Settings(BaseSettings):
     feedback_group_id: str | None = None
 
     # Cloud.ru API (Whisper)
-    cloudru_iam_key: str
-    cloudru_iam_secret: str
-    whisper_model_url: str
-    whisper_model_name: str
+    cloudru_iam_key: str = ""
+    cloudru_iam_secret: str = ""
+    whisper_model_url: str = ""
+    whisper_model_name: str = ""
 
     # Cloud.ru API (Qwen)
-    cloud_public_url: str
+    cloud_public_url: str = ""
     # Попробуем разные варианты моделей (если одна не работает, можно попробовать другую):
     # "library/qwen2.5:14b" - текстовая модель 14B параметров
     # "library/qwen2.5:7b" - текстовая модель 7B параметров (быстрее)
     # "library/qwen2.5vl:32b" - vision-language модель 32B (медленнее, но была рабочей)
-    qwen_model: str
+    qwen_model: str = ""
     system_prompt: str = "Ты - полезный ассистент. Отвечай на русском языке."
     qwen_max_tokens: int = 512
     qwen_temperature: float = 0.2

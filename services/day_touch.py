@@ -110,8 +110,9 @@ async def send_day_touch(bot: Bot) -> None:
                 
                 # Отправляем ссылку на видео, если есть
                 if content.video_url:
+                    from aiogram.types import LinkPreviewOptions
                     keyboard = _build_day_keyboard()
-                    await bot.send_message(telegram_id, content.video_url, reply_markup=keyboard)
+                    await bot.send_message(telegram_id, content.video_url, reply_markup=keyboard, link_preview_options=LinkPreviewOptions(is_disabled=True))
                 else:
                     # Если видео нет, отправляем клавиатуру отдельно
                     keyboard = _build_day_keyboard()
